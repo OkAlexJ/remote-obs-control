@@ -114,10 +114,10 @@ async function outputAction(type, label){
 }
 async function toggleStream(){
   if(outputs.stream.active){
-    if(!await askConfirm('End the stream?', 'Your stream will go offline for viewers.', 'End stream', true)) return;
+    if(PREFS.confirmStream && !await askConfirm('End the stream?', 'Your stream will go offline for viewers.', 'End stream', true)) return;
     if(await outputAction('StopStream','Stop stream')) { outputs.stream.state=OUT_STATE.STOPPING; renderOutputs(); }
   } else {
-    if(!await askConfirm('Go live now?', `This starts streaming from OBS on ${OBS.lastConn?OBS.lastConn.host:'the other PC'} using its stream settings.`, 'Go live')) return;
+    if(PREFS.confirmStream && !await askConfirm('Go live now?', `This starts streaming from OBS on ${OBS.lastConn?OBS.lastConn.host:'the other PC'} using its stream settings.`, 'Go live')) return;
     if(await outputAction('StartStream','Start stream')) { outputs.stream.state=OUT_STATE.STARTING; renderOutputs(); }
   }
 }

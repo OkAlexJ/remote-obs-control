@@ -154,8 +154,8 @@ function renderMacroGrid(){
   });
   const add=document.createElement('div');
   add.className='sb-add-tile';
-  add.textContent='+';
-  add.title='New macro';
+  add.innerHTML='<span>+</span><small>New macro</small>';
+  add.title='A macro does several things with one click — e.g. switch scene, mute the mic and start recording';
   add.addEventListener('click',()=>openMacroModal(null));
   grid.appendChild(add);
 }

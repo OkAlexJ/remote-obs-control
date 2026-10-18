@@ -2,7 +2,6 @@
 const SB_POOL_SIZE=16; // max sounds that can genuinely overlap at once
 const SB_PLAYER_PREFIX='Soundboard Player ';
 const SB_MAX_FILE_MB=10;
-$('sbPoolSizeNote').textContent=SB_POOL_SIZE;
 
 let sbState={ boards:[], buttons:{}, sounds:{} };
 let sbActiveBoardId=null;
@@ -133,7 +132,7 @@ function sbRenderGrid(){
   });
   const addTile=document.createElement('div');
   addTile.className='sb-add-tile';
-  addTile.textContent='+';
+  addTile.innerHTML='<span>+</span><small>Add sound</small>';
   addTile.title='Add a soundboard button';
   addTile.addEventListener('click',()=>sbOpenModal(null));
   grid.appendChild(addTile);
@@ -201,10 +200,6 @@ function sbRenderLibrary(){
     list.appendChild(row);
   });
 }
-$('sbLibraryToggle').addEventListener('click',()=>{
-  const collapsed=$('sbLibraryList').classList.toggle('hidden');
-  $('sbLibraryCaret').textContent=collapsed?'▸':'▾';
-});
 
 function sbPreviewLocal(src){
   if(sbPreviewAudio){ sbPreviewAudio.pause(); sbPreviewAudio=null; }

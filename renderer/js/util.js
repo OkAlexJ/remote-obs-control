@@ -1,6 +1,14 @@
 // ==================== Shared helpers ====================
 const $ = id => document.getElementById(id);
 
+// App-wide preferences (the same for every profile); edited in Settings
+const PREF_DEFAULTS={ theme:'violet', accent:'', density:'comfortable', tileSize:110, autoConnect:true, confirmStream:true, thumbs:true, toasts:true, fps:'15' };
+const PREFS=(()=>{ try{ return { ...PREF_DEFAULTS, ...JSON.parse(localStorage.getItem('prefs')||'{}') }; }catch(e){ return { ...PREF_DEFAULTS }; } })();
+function setPref(key, value){
+  PREFS[key]=value;
+  try{ localStorage.setItem('prefs', JSON.stringify(PREFS)); }catch(e){}
+}
+
 function escapeHtml(s){ return String(s ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function cssSafe(s){ return String(s ?? '').replace(/[^a-zA-Z0-9]/g,'_'); }
 function uid(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -138,6 +146,7 @@ window.addEventListener('keydown', e=>{ if(e.key==='Escape' && $('ctxMenu')){ hi
 
 // ==================== Toast notifications ====================
 function notify(message, type){
+  if(!PREFS.toasts && type!=='err') return; // errors always show
   const stack=$('toastStack');
   const el=document.createElement('div');
   el.className='toast'+(type?' '+type:'');

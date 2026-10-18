@@ -1,6 +1,6 @@
 {
   "name": "remote-obs-control",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Remote OBS Control — control OBS on another PC: scenes, sources, audio, stream/record, soundboard, macros, profiles",
   "main": "main.js",
   "author": "You",
@@ -8,7 +8,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "mock-obs": "node tools/mock-obs.js 4455 test",
+    "mock-obs": "node tools/mock-obs.js 4456 test",
     "build:win": "electron-builder --win nsis",
     "build:win-portable": "electron-builder --win portable"
   },

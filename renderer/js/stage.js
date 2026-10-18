@@ -5,7 +5,7 @@ let selectedItemId=null;
 let draggingItemId=null;     // item currently being dragged/scaled (ignore OBS echo events for it)
 let stageLoopGen=0;
 let propsInputName=null, propsFields=null, propsOriginal=null, propsCurrentItem=null, propsMediaTimer=null;
-let sizeMode='percent';
+
 
 const OBS_ALIGN={ LEFT:1, RIGHT:2, TOP:4, BOTTOM:8 };
 const SNAP_PX=8; // screen pixels
@@ -135,7 +135,6 @@ window.addEventListener('resize',()=>{ if(editingScene) renderStage(); });
 $('zoomInBtn').addEventListener('click',()=>{ zoomLevel=Math.min(zoomLevel*1.25,4); renderStage(); });
 $('zoomOutBtn').addEventListener('click',()=>{ zoomLevel=Math.max(zoomLevel/1.25,0.5); renderStage(); });
 $('zoomResetBtn').addEventListener('click',()=>{ zoomLevel=1; renderStage(); });
-$('syncPosBtn').addEventListener('click', refreshItems);
 $('refreshSceneBtn').addEventListener('click',()=>editingScene && loadScene(editingScene));
 $('stageWrap').addEventListener('wheel',(e)=>{
   if(!e.ctrlKey) return;
@@ -158,8 +157,8 @@ function restartStageBgLoop(){
   const gen=++stageLoopGen;
   (async function loop(){
     while(gen===stageLoopGen && editingScene && isConnected()){
-      const fps=parseInt($('fpsSelect').value,10)||0;
-      if(!fps || document.hidden){ await sleep(500); continue; }
+      const fps=parseInt(PREFS.fps,10)||0;
+      if(!fps || document.hidden || !panelVisible('editor')){ await sleep(500); continue; }
       const t0=performance.now();
       await refreshStageBg();
       const delay=1000/fps-(performance.now()-t0);
@@ -168,7 +167,6 @@ function restartStageBgLoop(){
   })();
 }
 function stopStageBgLoop(){ stageLoopGen++; }
-$('fpsSelect').addEventListener('change',()=>{ appStorageSet('previewFps', $('fpsSelect').value); });
 
 // ---- Dragging (with edge/center snapping) ----
 function clearSnapGuides(){ document.querySelectorAll('.snap-guide').forEach(g=>g.remove()); }
@@ -568,13 +566,7 @@ function updateScaleInputsUI(){
   if(!propsCurrentItem) return;
   const t=propsCurrentItem.sceneItemTransform||{};
   const sx=t.scaleX ?? 1, sy=t.scaleY ?? 1;
-  if(sizeMode==='percent'){
-    $('labelScaleX').textContent='Scale X (%)'; $('labelScaleY').textContent='Scale Y (%)';
-    $('propScaleX').value=(sx*100).toFixed(1); $('propScaleY').value=(sy*100).toFixed(1);
-  } else {
-    $('labelScaleX').textContent='Scale X (ratio)'; $('labelScaleY').textContent='Scale Y (ratio)';
-    $('propScaleX').value=sx.toFixed(3); $('propScaleY').value=sy.toFixed(3);
-  }
+  $('propScaleX').value=(sx*100).toFixed(1); $('propScaleY').value=(sy*100).toFixed(1);
   const disabled=hasBounds(t);
   $('propScaleX').disabled=disabled; $('propScaleY').disabled=disabled;
   $('propScaleX').title=disabled?'This source uses a bounding box; scale is controlled by its bounds (use Reset to remove).':'';
@@ -583,8 +575,6 @@ function updateScaleInputsUI(){
   $('propRot').value=Math.round((t.rotation||0)*10)/10;
 }
 
-$('modePctBtn').addEventListener('click',()=>{ sizeMode='percent'; $('modePctBtn').classList.add('active'); $('modeRatioBtn').classList.remove('active'); updateScaleInputsUI(); });
-$('modeRatioBtn').addEventListener('click',()=>{ sizeMode='ratio'; $('modeRatioBtn').classList.add('active'); $('modePctBtn').classList.remove('active'); updateScaleInputsUI(); });
 $('fitScreenBtn').addEventListener('click',()=>propsCurrentItem && fitItemToScreen(propsCurrentItem));
 $('centerBtn').addEventListener('click',()=>propsCurrentItem && centerItem(propsCurrentItem));
 $('resetTransformBtn').addEventListener('click',()=>propsCurrentItem && resetItemTransform(propsCurrentItem));
@@ -675,7 +665,7 @@ $('propsSave').addEventListener('click',async()=>{
     if(!hasBounds(t)){
       let sx=parseFloat($('propScaleX').value), sy=parseFloat($('propScaleY').value);
       if(!isNaN(sx) && !isNaN(sy) && sx!==0 && sy!==0){
-        if(sizeMode==='percent'){ sx/=100; sy/=100; }
+        sx/=100; sy/=100;
         transform.scaleX=sx; transform.scaleY=sy;
       }
     }
@@ -704,13 +694,17 @@ async function populateExistingSources(){
 }
 function syncAddFields(){
   const v=$('addType').value;
-  $('addExisting').classList.toggle('hidden', v!=='existing');
-  $('addName').classList.toggle('hidden', v==='existing');
-  $('addUrl').classList.toggle('hidden', v!=='browser_source');
-  $('addFile').classList.toggle('hidden', v!=='image_source');
-  $('addText').classList.toggle('hidden', v!=='text_source');
-  $('addColor').classList.toggle('hidden', v!=='color_source');
-  $('addDims').classList.toggle('hidden', !(v==='browser_source' || v==='color_source'));
+  const show=(id,on)=>$(id).classList.toggle('hidden',!on);
+  show('addExisting', v==='existing');
+  show('addName', v!=='existing');
+  show('addUrl', v==='browser_source');
+  show('addFile', v==='image_source');
+  show('addText', v==='text_source');
+  show('addColor', v==='color_source');
+  show('uploadFileInput', v==='upload');
+  show('uploadAudioRow', v==='upload');
+  show('addDims', v==='browser_source' || v==='color_source');
+  $('addName').placeholder=v==='upload'?'Name (optional)':'Name';
   if(v==='existing') populateExistingSources();
 }
 $('addType').addEventListener('change', syncAddFields);
@@ -745,11 +739,16 @@ $('addBtn').addEventListener('click', async ()=>{
     return;
   }
 
-  const name=$('addName').value.trim();
+  const file=$('uploadFileInput').files[0];
+  if(kind==='upload' && !file) return fail('Choose a file first.');
+  const name=$('addName').value.trim() || (kind==='upload' ? file.name.replace(/\.[^.]+$/,'') : '');
   if(!name) return fail('Give the source a name.');
   let actualKind=kind, inputSettings={};
   const w=parseInt($('addW').value,10)||baseW, h=parseInt($('addH').value,10)||baseH;
-  if(kind==='browser_source'){
+  if(kind==='upload'){
+    actualKind='browser_source';
+    try{ inputSettings=await uploadSettingsFromFile(file); }catch(e){ return fail(e.message); }
+  } else if(kind==='browser_source'){
     const url=$('addUrl').value.trim();
     if(!/^(https?|file):\/\//i.test(url)) return fail('Enter a full overlay URL starting with https://');
     inputSettings={ url, width:w, height:h };
@@ -773,47 +772,27 @@ $('addBtn').addEventListener('click', async ()=>{
   const d=await sendRequest('CreateInput',{ sceneName:editingScene, inputName:name, inputKind:actualKind, inputSettings });
   $('addBtn').disabled=false;
   if(!d.requestStatus.result) return fail('Could not add source: '+reqError(d));
-  logActivity(`Created ${name} in ${editingScene}`);
-  $('addName').value=''; $('addUrl').value=''; $('addFile').value=''; $('addText').value='';
+  logActivity(`Added ${name} to ${editingScene}`);
+  ['addName','addUrl','addFile','addText','uploadFileInput'].forEach(id=>{ $(id).value=''; });
   await refreshItems();
 });
 
-// ---- Upload a local file (HTML overlay or image) straight into a browser_source ----
+// A local HTML overlay or image becomes a browser source with the file embedded, so nothing needs copying to their PC
 const MAX_UPLOAD_MB=12;
-$('uploadFileBtn').addEventListener('click', async ()=>{
-  hideBoxErr('uploadErr');
-  const fail=m=>showBoxErr('uploadErr',m);
-  if(!editingScene) return fail('Load a scene first.');
-  const fileInput=$('uploadFileInput');
-  const file=fileInput.files[0];
-  if(!file) return fail('Choose a file first.');
-  if(file.size>MAX_UPLOAD_MB*1024*1024) return fail(`That file is over ${MAX_UPLOAD_MB} MB — too big to send through obs-websocket. Host it somewhere and use a Browser source URL instead.`);
-  const name=$('uploadName').value.trim() || file.name;
+async function uploadSettingsFromFile(file){
+  if(file.size>MAX_UPLOAD_MB*1024*1024) throw new Error(`That file is over ${MAX_UPLOAD_MB} MB — too big to send to OBS. Host it online and add it as a web page instead.`);
   const isHtml=/\.html?$/i.test(file.name);
-  const isImage=file.type.startsWith('image/');
-  if(!isHtml && !isImage) return fail('Only HTML files and images are supported.');
-
-  $('uploadFileBtn').disabled=true;
-  try{
-    let htmlString, width=baseW, height=baseH;
-    if(isHtml) htmlString=await readFileAsText(file);
-    else {
-      const dataUrl=await readFileAsDataURL(file);
-      const dims=await new Promise(res=>{ const im=new Image(); im.onload=()=>res({w:im.naturalWidth,h:im.naturalHeight}); im.onerror=()=>res(null); im.src=dataUrl; });
-      if(dims && dims.w && dims.h){ width=dims.w; height=dims.h; }
-      htmlString=`<!DOCTYPE html><html><head><style>html,body{margin:0;background:transparent;overflow:hidden;}img{width:100%;height:100%;object-fit:contain;}</style></head><body><img src="${dataUrl}"></body></html>`;
-    }
-    const d=await sendRequest('CreateInput',{
-      sceneName:editingScene, inputName:name, inputKind:'browser_source',
-      inputSettings:{ url:toBase64HtmlUrl(htmlString), width, height, reroute_audio:$('uploadAudio').checked }
-    });
-    if(!d.requestStatus.result) throw new Error(reqError(d));
-    $('uploadName').value=''; fileInput.value='';
-    logActivity(`Uploaded ${file.name} into ${editingScene}`);
-    await refreshItems();
-  } catch(e){ fail('Upload failed: '+e.message); }
-  $('uploadFileBtn').disabled=false;
-});
+  if(!isHtml && !file.type.startsWith('image/')) throw new Error('Only images and HTML files are supported.');
+  let htmlString, width=baseW, height=baseH;
+  if(isHtml) htmlString=await readFileAsText(file);
+  else {
+    const dataUrl=await readFileAsDataURL(file);
+    const dims=await new Promise(res=>{ const im=new Image(); im.onload=()=>res({w:im.naturalWidth,h:im.naturalHeight}); im.onerror=()=>res(null); im.src=dataUrl; });
+    if(dims && dims.w && dims.h){ width=dims.w; height=dims.h; }
+    htmlString=`<!DOCTYPE html><html><head><style>html,body{margin:0;background:transparent;overflow:hidden;}img{width:100%;height:100%;object-fit:contain;}</style></head><body><img src="${dataUrl}"></body></html>`;
+  }
+  return { url:toBase64HtmlUrl(htmlString), width, height, reroute_audio:$('uploadAudio').checked };
+}
 
 // ---- Screenshot of the scene being edited ----
 $('screenshotBtn').addEventListener('click',async()=>{

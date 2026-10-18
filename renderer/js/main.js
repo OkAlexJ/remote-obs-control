@@ -2,12 +2,12 @@
 function enterApp(profile){
   $('profileBarAvatar').textContent=profile.avatar||'🎬';
   $('profileBarName').textContent=profile.name;
-  $('fpsSelect').value=appStorageGet('previewFps','15');
   initAudioPrefs();
   initSoundboardUI();
   initMacrosUI();
   initTwitchUI();
   renderActivityLog();
+  applyLayout();
   setConnectedUI(false);
   setStatus('Not connected','');
   $('appRoot').classList.remove('hidden');

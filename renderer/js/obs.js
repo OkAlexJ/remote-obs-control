@@ -53,10 +53,16 @@ function closeReasonText(code, reason){
   }
 }
 
+// While connected the address fields fold away; ✎ brings them back to change the connection
 function updateConnectButton(){
   const btn=$('connectBtn');
   const busy=OBS.ws && !OBS.identified && OBS.ws.readyState<=WebSocket.OPEN;
-  if(isConnected() || OBS.reconnectTimer){ btn.textContent='Disconnect'; btn.classList.add('secondary'); }
+  const topbar=document.querySelector('.topbar');
+  const linked=isConnected() || !!OBS.reconnectTimer;
+  topbar.classList.toggle('connected', linked);
+  if(!linked) topbar.classList.remove('editing');
+  if(linked && topbar.classList.contains('editing')){ btn.textContent='Reconnect'; btn.classList.remove('secondary'); }
+  else if(linked){ btn.textContent='Disconnect'; btn.classList.add('secondary'); }
   else { btn.textContent=busy?'Connecting…':'Connect'; btn.classList.remove('secondary'); }
   btn.disabled=!!busy && !OBS.reconnectTimer;
 }
@@ -221,7 +227,15 @@ function testObsConnection(host, port, password){
 
 // ---- Connection bar wiring ----
 $('connectBtn').addEventListener('click', ()=>{
-  if(isConnected() || OBS.reconnectTimer){ disconnectObs(); return; }
+  const topbar=document.querySelector('.topbar');
+  if((isConnected() || OBS.reconnectTimer) && !topbar.classList.contains('editing')){ disconnectObs(); return; }
+  topbar.classList.remove('editing');
   connectObs({ host:$('host').value, port:$('port').value, password:$('pass').value });
+});
+$('editConnBtn').addEventListener('click',()=>{
+  const topbar=document.querySelector('.topbar');
+  topbar.classList.toggle('editing');
+  updateConnectButton();
+  if(topbar.classList.contains('editing')) $('host').focus();
 });
 ['host','port','pass'].forEach(id=>$(id).addEventListener('keydown',e=>{ if(e.key==='Enter') $('connectBtn').click(); }));

@@ -93,7 +93,7 @@ async function plSelectProfile(profile){
     $('host').value=conn.host||'';
     $('port').value=conn.port||'4455';
     $('pass').value=await window.desktop.connections.getPassword(conn.id)||'';
-    connectObs({ host:$('host').value, port:$('port').value, password:$('pass').value });
+    if(PREFS.autoConnect) connectObs({ host:$('host').value, port:$('port').value, password:$('pass').value });
   } else {
     $('host').value=''; $('port').value='4455'; $('pass').value='';
     $('host').focus();

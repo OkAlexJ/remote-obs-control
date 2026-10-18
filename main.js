@@ -388,6 +388,11 @@ ipcMain.handle('file:saveImage', async (e, dataUrl, suggestedName) => {
 });
 
 // ==================== Window ====================
+ipcMain.handle('window:setPin', (e, on) => {
+  if (!mainWindow) return false;
+  mainWindow.setAlwaysOnTop(!!on);
+  return mainWindow.isAlwaysOnTop();
+});
 ipcMain.handle('window:togglePin', () => {
   if (!mainWindow) return false;
   mainWindow.setAlwaysOnTop(!mainWindow.isAlwaysOnTop());

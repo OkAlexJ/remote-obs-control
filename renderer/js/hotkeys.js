@@ -19,7 +19,7 @@ function comboFromEvent(e){
 }
 
 // Keys the app itself uses — refuse them as custom hotkeys
-const RESERVED_COMBOS=['Ctrl+K','Ctrl+P','Ctrl+T','Ctrl+Shift+T','Escape','Shift+?','?','Delete','Backspace','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Shift+ArrowUp','Shift+ArrowDown','Shift+ArrowLeft','Shift+ArrowRight','Tab','Enter'];
+const RESERVED_COMBOS=['Ctrl+,','Ctrl+K','Ctrl+P','Ctrl+T','Ctrl+Shift+T','Escape','Shift+?','?','Delete','Backspace','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Shift+ArrowUp','Shift+ArrowDown','Shift+ArrowLeft','Shift+ArrowRight','Tab','Enter'];
 
 // Every hotkey currently assigned, as [{combo, kind, id, label}]
 function allHotkeys(){
@@ -104,6 +104,7 @@ window.addEventListener('keydown',(e)=>{
   const key=e.key.toLowerCase();
   if(e.ctrlKey && !e.altKey && !e.shiftKey && key==='k' && inApp){ e.preventDefault(); openCommandPalette(); return; }
   if(e.ctrlKey && !e.altKey && !e.shiftKey && key==='p' && inApp){ e.preventDefault(); openQuickSwitcher(); return; }
+  if(e.ctrlKey && !e.shiftKey && e.key===','){ e.preventDefault(); openSettings(); return; }
   if(e.ctrlKey && e.shiftKey && key==='t'){ e.preventDefault(); nextTheme(); return; }
   if(e.ctrlKey && !e.shiftKey && key==='t'){ e.preventDefault(); togglePin(); return; }
 

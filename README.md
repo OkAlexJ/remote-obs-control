@@ -14,13 +14,19 @@ A fake OBS ships with the project, so you can click around without a second PC:
 ```
 npm run mock-obs
 ```
-Then connect to host `localhost`, port `4455`, password `test` (or run `node tools/mock-obs.js 4455` for no password).
+Then connect to host `localhost`, port `4456`, password `test` (port 4456 so it never clashes with a real OBS on 4455).
 
 ## Build the Windows installer
 ```
 npm run build:win            # dist\Remote OBS Control Setup <version>.exe
 npm run build:win-portable   # single portable .exe
 ```
+
+## Make it yours (⚙ Settings, or Ctrl+,)
+- **Layout** — switch any panel on/off, or pick a preset: *Essentials* (default), *Button deck* (big buttons, no editor) or *Everything*. Saved per profile. Click any panel title to collapse it.
+- **Look** — theme, your own accent color, compact or comfortable density, soundboard/macro button size.
+- **Behavior** — auto-connect, stream start/stop confirmation, scene thumbnails, pop-up notifications, keep on top, preview refresh rate.
+- Once connected, the address fields fold away (✎ to change them).
 
 ## Features
 
@@ -65,7 +71,7 @@ npm run build:win-portable   # single portable .exe
 
 **Everywhere**
 - **Ctrl+K** command palette (scenes, sources, mutes, sounds, macros, stream/record actions…).
-- **Ctrl+P** profile switcher, **Ctrl+Shift+T** themes (Violet, Ocean, Sunset, Forest, Light), **Ctrl+T** keep on top, **?** help.
+- **Ctrl+P** profile switcher, **Ctrl+,** settings, **Ctrl+Shift+T** next theme, **Ctrl+T** keep on top, **?** help.
 - Twitch: open the stream and chat in their own windows; optional live viewer count/title/uptime
   (token stored encrypted, requests made from the main process).
 
@@ -93,7 +99,8 @@ renderer/
   js/soundboard.js Soundboard
   js/macros.js     Macros
   js/twitch.js     Twitch
-  js/palette.js    Command palette, profile switcher, themes, help
+  js/settings.js   Settings: panel layout/presets, theme, accent, density, behavior
+  js/palette.js    Command palette, profile switcher, help
   js/profiles.js   Profile launcher + editor
   js/main.js       Startup and connect/disconnect wiring
 tools/mock-obs.js  Fake OBS for development

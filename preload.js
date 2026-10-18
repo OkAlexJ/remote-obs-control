@@ -32,7 +32,10 @@ contextBridge.exposeInMainWorld('desktop', {
   files: {
     saveImage: (dataUrl, name) => ipcRenderer.invoke('file:saveImage', dataUrl, name)
   },
-  win: { togglePin: () => ipcRenderer.invoke('window:togglePin') },
+  win: {
+    togglePin: () => ipcRenderer.invoke('window:togglePin'),
+    setPin: (on) => ipcRenderer.invoke('window:setPin', on)
+  },
   app: {
     getLastProfile: () => ipcRenderer.invoke('app:getLastProfile'),
     version: () => ipcRenderer.invoke('app:version')

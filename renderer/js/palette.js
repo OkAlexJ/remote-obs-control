@@ -37,7 +37,9 @@ function buildPaletteItems(){
   items.push({ kind:'Action', label:'Stop all sounds', run:sbStopAll });
   items.push({ kind:'Action', label:'New soundboard button', run:()=>sbOpenModal(null) });
   items.push({ kind:'Action', label:'New macro', run:()=>openMacroModal(null) });
+  items.push({ kind:'App', label:'Settings', run:openSettings });
   items.push({ kind:'App', label:'Change theme', run:nextTheme });
+  PANELS.forEach(p=>items.push({ kind:'Layout', label:(isPanelShown(p.id)?'Hide ':'Show ')+p.name+' panel', run:()=>setPanelShown(p.id,!isPanelShown(p.id)) }));
   items.push({ kind:'App', label:'Switch profile', run:openQuickSwitcher });
   items.push({ kind:'App', label:'Keyboard shortcuts', run:openHelp });
   return items;
@@ -137,31 +139,7 @@ $('switcherBackdrop').addEventListener('click', closeQuickSwitcher);
 $('openSwitcherBtn').addEventListener('click', openQuickSwitcher);
 $('profileChip').addEventListener('click', openQuickSwitcher);
 
-// ==================== Themes, pin, help ====================
-const THEMES=['violet','ocean','sunset','forest','light'];
-function applyTheme(t){
-  document.documentElement.setAttribute('data-theme',t);
-  try{ localStorage.setItem('theme',t); }catch(e){}
-  if(typeof requestVizDraw==='function') requestVizDraw();
-}
-function nextTheme(){
-  const cur=document.documentElement.getAttribute('data-theme');
-  const t=THEMES[(THEMES.indexOf(cur)+1)%THEMES.length];
-  applyTheme(t);
-  notify('Theme: '+t[0].toUpperCase()+t.slice(1));
-}
-(function(){ let cur='violet'; try{ cur=localStorage.getItem('theme')||'violet'; }catch(e){} applyTheme(THEMES.includes(cur)?cur:'violet'); })();
-
-async function togglePin(){
-  if(!window.desktop) return;
-  const on=await window.desktop.win.togglePin();
-  $('dockPin').classList.toggle('on',on);
-  notify(on?'Window will stay on top':'Window no longer on top');
-}
+// ==================== Help ====================
 function openHelp(){ openModal('helpBox','helpBackdrop'); }
-
-$('dockTheme').addEventListener('click',nextTheme);
-$('dockPin').addEventListener('click',togglePin);
 $('dockHelp').addEventListener('click',openHelp);
 $('helpBackdrop').addEventListener('click',()=>closeModal('helpBox'));
-if(!window.desktop) $('dockPin').classList.add('hidden');

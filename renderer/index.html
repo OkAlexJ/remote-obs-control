@@ -12,9 +12,66 @@
 <div id="toastStack" aria-live="polite"></div>
 
 <div id="dock">
-  <button class="secondary" id="dockTheme" title="Change theme (Ctrl+Shift+T)">🎨</button>
-  <button class="secondary" id="dockPin" title="Keep window on top (Ctrl+T)">📌</button>
+  <button class="secondary" id="dockSettings" title="Settings — layout, look &amp; behavior (Ctrl+,)">⚙</button>
   <button class="secondary" id="dockHelp" title="Keyboard shortcuts (?)">?</button>
+</div>
+
+<!-- ===== Settings ===== -->
+<div class="hidden backdrop" id="settingsBackdrop"></div>
+<div class="hidden modal wide" id="settingsBox" role="dialog" aria-modal="true">
+  <div class="settings-head">
+    <h3>Settings</h3>
+    <div class="seg" id="settingsTabs">
+      <button data-tab="layout" class="active">Layout</button>
+      <button data-tab="look">Look</button>
+      <button data-tab="behavior">Behavior</button>
+    </div>
+  </div>
+
+  <div class="settings-tab" data-tab="layout">
+    <p class="hint">Show only what you use. Saved per profile — tip: click any panel's title to collapse it.</p>
+    <div class="preset-row" id="layoutPresets"></div>
+    <div class="panel-toggles" id="panelToggles"></div>
+  </div>
+
+  <div class="settings-tab hidden" data-tab="look">
+    <label>Theme</label>
+    <div class="theme-row" id="themeChoices"></div>
+    <label style="margin-top:14px;">Accent color</label>
+    <div class="row" style="align-items:center;gap:8px;">
+      <input type="color" id="accentPicker" style="width:56px;height:34px;padding:2px;">
+      <button class="secondary icon" id="accentReset">Use theme color</button>
+    </div>
+    <label style="margin-top:14px;">Density</label>
+    <div class="seg" id="densityChoices">
+      <button data-density="comfortable">Comfortable</button>
+      <button data-density="compact">Compact</button>
+    </div>
+    <label style="margin-top:14px;">Soundboard &amp; macro button size</label>
+    <input type="range" id="tileSize" min="80" max="160" step="10">
+  </div>
+
+  <div class="settings-tab hidden" data-tab="behavior">
+    <div class="checkbox-row"><input type="checkbox" id="optAutoConnect"><label for="optAutoConnect">Connect automatically when I open a profile</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="optConfirmStream"><label for="optConfirmStream">Ask before starting or ending the stream</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="optThumbs"><label for="optThumbs">Show live scene thumbnails</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="optToasts"><label for="optToasts">Show pop-up notifications</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="optPin"><label for="optPin">Keep this window on top of others</label></div>
+    <label style="margin-top:12px;" for="optFps">Layout preview refresh rate</label>
+    <select id="optFps" style="width:180px;">
+      <option value="30">Smooth (30 fps)</option>
+      <option value="15">Normal (15 fps)</option>
+      <option value="5">Light (5 fps)</option>
+      <option value="1">Minimal (1 fps)</option>
+      <option value="0">Off</option>
+    </select>
+    <p class="hint" style="margin-top:8px;">Lower rates use less network and CPU on the OBS PC.</p>
+  </div>
+
+  <div class="modal-actions" style="justify-content:space-between;">
+    <span class="hint" id="helpVersion"></span>
+    <button id="settingsDone">Done</button>
+  </div>
 </div>
 
 <!-- ===== Generic dialogs (replaces prompt/confirm/alert, which Electron doesn't support well) ===== -->
@@ -33,16 +90,16 @@
 <div class="hidden modal" id="helpBox" role="dialog" aria-modal="true"><h3>Keyboard shortcuts</h3>
   <div class="kv"><span>Search everything (scenes, sources, sounds, macros, actions)</span><kbd>Ctrl + K</kbd></div>
   <div class="kv"><span>Switch profile</span><kbd>Ctrl + P</kbd></div>
+  <div class="kv"><span>Settings</span><kbd>Ctrl + ,</kbd></div>
   <div class="kv"><span>Change theme</span><kbd>Ctrl + Shift + T</kbd></div>
   <div class="kv"><span>Keep window on top</span><kbd>Ctrl + T</kbd></div>
+  <div class="kv"><span>Go live on a scene</span><kbd>Double-click it</kbd></div>
   <div class="kv"><span>Nudge selected source (Shift = bigger steps)</span><kbd>Arrow keys</kbd></div>
-  <div class="kv"><span>Remove selected source from scene</span><kbd>Delete</kbd></div>
-  <div class="kv"><span>Snap to edges while dragging (hold to disable)</span><kbd>Alt</kbd></div>
-  <div class="kv"><span>Go live on a scene</span><kbd>Double-click its tab</kbd></div>
-  <div class="kv"><span>Show this help</span><kbd>?</kbd></div>
-  <div class="kv"><span>Close any popup / deselect</span><kbd>Esc</kbd></div>
-  <p class="upload-note" style="margin-top:12px;">Your own hotkeys for scenes (⌨ on a scene tab), soundboard buttons and macros work anywhere in the app while you're not typing in a field.</p>
-  <p class="upload-note" id="helpVersion"></p>
+  <div class="kv"><span>Resize: keep aspect / from center</span><kbd>Shift / Ctrl</kbd></div>
+  <div class="kv"><span>Drag without snapping</span><kbd>Alt</kbd></div>
+  <div class="kv"><span>Remove selected source</span><kbd>Delete</kbd></div>
+  <div class="kv"><span>Close popup / deselect</span><kbd>Esc</kbd></div>
+  <p class="hint" style="margin-top:12px;">Right-click scenes, sources, sounds and macros for more options. Your own hotkeys work anywhere except while typing.</p>
 </div>
 
 <div class="hidden backdrop" id="paletteBackdrop"></div>
@@ -92,7 +149,7 @@
         <button type="button" class="secondary" id="plConnTestBtn">🔌 Test connection</button>
         <button type="button" class="secondary danger hidden" id="plConnDeleteBtn">Delete connection</button>
       </div>
-      <div id="plConnTestResult" class="upload-note"></div>
+      <div id="plConnTestResult" class="hint"></div>
     </div>
   </div>
 
@@ -122,22 +179,24 @@
     </div>
   </div>
   <div class="tb-conn">
-    <div><label for="host">Host / Tailscale IP</label><input id="host" placeholder="100.x.x.x" autocomplete="off"></div>
-    <div><label for="port">Port</label><input id="port" value="4455" style="width:72px;"></div>
-    <div><label for="pass">Password</label><input id="pass" type="password" placeholder="(blank if none)"></div>
+    <div class="tb-conn-fields">
+      <div><label for="host">OBS address</label><input id="host" placeholder="IP, e.g. 100.x.x.x" autocomplete="off"></div>
+      <div><label for="port">Port</label><input id="port" value="4455" style="width:72px;"></div>
+      <div><label for="pass">Password</label><input id="pass" type="password" placeholder="(if set)"></div>
+      <button class="secondary hidden" id="saveConnBtn" title="Remember these details for this profile">Save</button>
+    </div>
+    <button id="editConnBtn" class="secondary icon tb-edit" title="Change connection details">✎</button>
     <button id="connectBtn">Connect</button>
-    <button class="secondary hidden" id="saveConnBtn" title="Save these connection details to this profile">💾</button>
   </div>
   <div class="tb-actions">
     <span id="viewerChip" class="chip hidden" title="Twitch viewers"></span>
-    <button class="secondary" id="openSearchBtn" title="Ctrl+K">🔎 Search</button>
-    <button class="secondary" id="openSwitcherBtn" title="Ctrl+P">🔀 Profiles</button>
+    <button class="secondary icon" id="openSearchBtn" title="Search everything (Ctrl+K)">🔎</button>
+    <button class="secondary icon" id="openSwitcherBtn" title="Switch profile (Ctrl+P)">👤</button>
   </div>
 </header>
 <div id="errBox" class="err-box hidden"></div>
 
-<!-- Outputs: stream / record / replay / virtual cam + live stats -->
-<section class="panel outputs hidden" id="outputsPanel">
+<section class="panel outputs hidden" id="outputsPanel" data-panel="outputs">
   <div class="out-group">
     <button class="out-btn" id="streamBtn" data-state="off"><span class="out-ico">📡</span><span class="out-label">Go Live</span><span class="out-time" id="streamTime"></span></button>
     <button class="out-btn" id="recordBtn" data-state="off"><span class="out-ico">⏺</span><span class="out-label">Record</span><span class="out-time" id="recordTime"></span></button>
@@ -146,7 +205,7 @@
     <button class="out-btn small hidden" id="replaySaveBtn" title="Save the last few seconds as a clip">💾 Clip</button>
     <button class="out-btn" id="vcamBtn" data-state="off"><span class="out-ico">🎥</span><span class="out-label">Virtual Cam</span></button>
   </div>
-  <div class="stats" id="statsRow">
+  <div class="stats" id="statsRow" data-panel="stats">
     <span title="Frames per second OBS is rendering">FPS <b id="statFps">–</b></span>
     <span title="OBS CPU usage">CPU <b id="statCpu">–</b></span>
     <span title="OBS memory usage">RAM <b id="statMem">–</b></span>
@@ -155,30 +214,29 @@
   </div>
 </section>
 
-<!-- Shown until a connection is up -->
 <section class="panel empty-state" id="emptyState">
   <div class="es-icon">🛰️</div>
-  <h2>Not connected to OBS</h2>
-  <p>Enter the address of the PC running OBS above and press <b>Connect</b>.</p>
-  <ol>
-    <li>In OBS on that PC: <b>Tools → WebSocket Server Settings</b> → tick <b>Enable WebSocket server</b>.</li>
-    <li>Use its IP (a Tailscale <code>100.x.x.x</code> address works great across networks) and port (default <b>4455</b>).</li>
-    <li>Click <b>Show Connect Info</b> in that window to see the password.</li>
-  </ol>
-  <p class="upload-note">Your soundboard and macros below can be set up while offline.</p>
+  <h2>Connect to OBS</h2>
+  <p>Type the address of the PC running OBS at the top, then press <b>Connect</b>.</p>
+  <details class="es-help">
+    <summary>Where do I find that?</summary>
+    <ol>
+      <li>In OBS on that PC open <b>Tools → WebSocket Server Settings</b> and tick <b>Enable WebSocket server</b>.</li>
+      <li>Click <b>Show Connect Info</b> — it shows the IP, port (usually <b>4455</b>) and password.</li>
+      <li>Not on the same network? A Tailscale <code>100.x.x.x</code> address works from anywhere.</li>
+    </ol>
+  </details>
 </section>
 
-<section class="panel hidden" id="scenesPanel">
+<section class="panel hidden" id="scenesPanel" data-panel="scenes">
   <div class="panel-head">
-    <h2>Scenes <span class="badge hidden" id="studioBadge">STUDIO MODE</span></h2>
+    <h2>Scenes <span class="badge hidden" id="studioBadge">STUDIO</span></h2>
     <div class="ph-tools">
-      <label class="inline-label" for="transitionSelect">Transition</label>
-      <select id="transitionSelect" class="fps-select"></select>
-      <input type="number" id="transitionDuration" class="fps-select" min="0" max="20000" step="50" style="width:84px;" title="Transition duration (ms)">
-      <span class="inline-label">ms</span>
-      <button class="secondary icon" id="studioToggleBtn" title="Toggle Studio Mode (preview before going live)">🎬 Studio</button>
-      <button class="hidden" id="transitionBtn" title="Send preview to program">⇄ Transition</button>
-      <button class="secondary icon" id="addSceneBtn" title="Create a new scene">＋ Scene</button>
+      <button class="hidden" id="transitionBtn" title="Send preview to live">⇄ Transition</button>
+      <select id="transitionSelect" class="fps-select" title="Transition"></select>
+      <input type="number" id="transitionDuration" class="fps-select" min="0" max="20000" step="50" style="width:76px;" title="Transition length (ms)">
+      <button class="secondary icon" id="studioToggleBtn" title="Studio mode: line up a scene in preview before sending it live">Studio</button>
+      <button class="secondary icon" id="addSceneBtn" title="New scene">＋</button>
     </div>
   </div>
   <div class="scene-strip" id="sceneStrip"></div>
@@ -186,152 +244,125 @@
 
 <div class="main hidden" id="mainArea">
   <div class="main-col">
-    <div class="zoom-row">
-      <div class="zoom-group">
-        <button class="secondary" id="zoomOutBtn" title="Zoom out">－</button>
-        <span class="zoom-label" id="zoomLabel">100%</span>
-        <button class="secondary" id="zoomInBtn" title="Zoom in">＋</button>
-        <button class="secondary" id="zoomResetBtn">Fit</button>
-        <button class="secondary" id="syncPosBtn" title="Pull the latest source positions/sizes from OBS">🔄 Sync</button>
-        <button class="secondary" id="screenshotBtn" title="Save a full-resolution screenshot of this scene">📸 Screenshot</button>
-      </div>
-      <div class="zoom-group">
-        <span id="editingLabel" class="inline-label"></span>
-        <label for="fpsSelect" class="inline-label">Preview:</label>
-        <select id="fpsSelect" class="fps-select">
-          <option value="30">30 FPS</option>
-          <option value="15" selected>15 FPS</option>
-          <option value="5">5 FPS</option>
-          <option value="1">1 FPS</option>
-          <option value="0">Paused</option>
-        </select>
-      </div>
-    </div>
-    <div class="stage-wrap" id="stageWrap"><div class="stage" id="stage"></div></div>
-    <div class="legend">
-      <span><span class="swatch" style="background:var(--text-src)"></span> Text</span>
-      <span><span class="swatch" style="background:#888"></span> Other source</span>
-      <span>Dashed = hidden • Faded = locked • Drag edges to scale • Shift = keep aspect • Ctrl = from center • Alt = no snapping</span>
-    </div>
-
-    <div class="panel" style="margin-top:12px;">
+    <section class="panel editor-panel" data-panel="editor">
       <div class="panel-head">
-        <h2>Audio Activity</h2>
+        <h2>Layout <span id="editingLabel" class="muted"></span></h2>
         <div class="ph-tools">
-          <label for="vizStyleSelect" class="inline-label">Style</label>
-          <select id="vizStyleSelect" class="fps-select">
+          <button class="secondary icon" id="zoomOutBtn" title="Zoom out (Ctrl+scroll)">－</button>
+          <span class="zoom-label" id="zoomLabel">100%</span>
+          <button class="secondary icon" id="zoomInBtn" title="Zoom in (Ctrl+scroll)">＋</button>
+          <button class="secondary icon" id="zoomResetBtn" title="Fit to window">Fit</button>
+          <button class="secondary icon" id="screenshotBtn" title="Save a full-resolution screenshot of this scene">📸</button>
+        </div>
+      </div>
+      <div class="stage-wrap" id="stageWrap"><div class="stage" id="stage"></div></div>
+    </section>
+
+    <section class="panel" data-panel="graph">
+      <div class="panel-head">
+        <h2>Audio graph</h2>
+        <div class="ph-tools">
+          <select id="vizStyleSelect" class="fps-select" title="Graph style">
             <option value="line">Line</option>
-            <option value="area">Filled area</option>
+            <option value="area">Area</option>
             <option value="bars">Bars</option>
-            <option value="dots">Dots</option>
           </select>
         </div>
       </div>
       <canvas id="audioVizCanvas"></canvas>
       <div id="audioVizLegend" class="viz-legend"></div>
-      <div class="upload-note" style="margin-top:6px;">Level history over the last ~10 seconds (obs-websocket only exposes volume, not frequency data).</div>
-    </div>
+    </section>
   </div>
 
   <div class="sidebar">
-    <div class="panel sb-panel">
-      <h2>Sources <span><button class="secondary icon" id="refreshSceneBtn" title="Reload this scene">↻</button></span></h2>
+    <section class="panel sb-panel" data-panel="sources">
+      <div class="panel-head">
+        <h2>Sources</h2>
+        <div class="ph-tools"><button class="secondary icon" id="refreshSceneBtn" title="Reload from OBS">↻</button></div>
+      </div>
       <div id="sourceList" class="scroll-list"></div>
-      <div id="hiddenPlayersNote" class="upload-note hidden"></div>
+      <div id="hiddenPlayersNote" class="hint hidden"></div>
 
       <details class="add-src" id="addSrcDetails">
         <summary>＋ Add a source</summary>
         <select id="addType">
-          <option value="existing">Existing source (from another scene)</option>
-          <option value="browser_source">Browser source (overlay URL)</option>
-          <option value="image_source">Image (file on their PC)</option>
+          <option value="existing">Existing source</option>
+          <option value="upload">File from this PC (image / HTML)</option>
+          <option value="browser_source">Web page / overlay URL</option>
           <option value="text_source">Text</option>
+          <option value="image_source">Image already on the OBS PC</option>
           <option value="color_source">Color block</option>
         </select>
         <select id="addExisting"></select>
-        <input id="addName" class="hidden" placeholder="Source name">
-        <input id="addUrl" class="hidden" placeholder="https://... (overlay URL)">
-        <input id="addFile" class="hidden" placeholder="C:\path\to\image.png (on their PC)">
-        <textarea id="addText" class="hidden" placeholder="Text to display..."></textarea>
+        <input id="addName" class="hidden" placeholder="Name">
+        <input id="addUrl" class="hidden" placeholder="https://…">
+        <input id="addFile" class="hidden" placeholder="C:\path\on\their\pc.png">
+        <textarea id="addText" class="hidden" placeholder="Text to show"></textarea>
         <input type="color" id="addColor" class="hidden" value="#7c5cff" style="height:34px;padding:2px;">
+        <input type="file" id="uploadFileInput" class="hidden" accept=".html,.htm,image/*">
+        <div class="checkbox-row hidden" id="uploadAudioRow"><input type="checkbox" id="uploadAudio"><label for="uploadAudio">Has sound (route through OBS)</label></div>
         <div class="row hidden" id="addDims">
-          <input id="addW" placeholder="Width" value="1280" style="width:90px;" title="Width">
-          <input id="addH" placeholder="Height" value="720" style="width:90px;" title="Height">
+          <input id="addW" placeholder="Width" value="1280" title="Width">
+          <input id="addH" placeholder="Height" value="720" title="Height">
         </div>
-        <button id="addBtn" style="width:100%;">Add to scene</button>
-        <div id="addErr" class="err-box hidden" style="margin-top:8px;"></div>
+        <button id="addBtn" style="width:100%;">Add</button>
+        <div id="addErr" class="err-box hidden"></div>
       </details>
+    </section>
 
-      <details class="add-src">
-        <summary>⬆ Upload a file from my PC</summary>
-        <input id="uploadName" placeholder="Source name">
-        <input type="file" id="uploadFileInput" accept=".html,.htm,image/*">
-        <div class="checkbox-row"><input type="checkbox" id="uploadAudio"><label for="uploadAudio">This file has sound (route audio through OBS)</label></div>
-        <button id="uploadFileBtn" style="width:100%;">Upload &amp; add to scene</button>
-        <div class="upload-note">Works for .html overlays and images. The file is embedded in the OBS source itself, so nothing needs to be copied onto their PC.</div>
-        <div id="uploadErr" class="err-box hidden"></div>
-      </details>
-    </div>
-
-    <div class="panel sb-panel">
-      <h2>Audio Mixer <button class="secondary icon" id="refreshAudioBtn" title="Reload inputs">↻</button></h2>
-      <div id="audioList" class="scroll-list"><div class="empty-note">Loading…</div></div>
-    </div>
-
-    <div class="panel sb-panel">
-      <h2>Twitch <span id="twitchLiveBadge" class="badge hidden">LIVE</span></h2>
-      <div class="row" style="gap:6px;margin-bottom:8px;flex-wrap:nowrap;">
-        <input id="twitchChannelInput" placeholder="Twitch channel name" style="flex:1;min-width:0;">
+    <section class="panel sb-panel" data-panel="mixer">
+      <div class="panel-head">
+        <h2>Audio</h2>
+        <div class="ph-tools"><button class="secondary icon" id="refreshAudioBtn" title="Reload from OBS">↻</button></div>
       </div>
-      <div class="row" style="gap:6px;margin-bottom:8px;">
+      <div id="audioList" class="scroll-list"><div class="empty-note">Loading…</div></div>
+    </section>
+
+    <section class="panel sb-panel" data-panel="twitch">
+      <div class="panel-head">
+        <h2>Twitch <span id="twitchLiveBadge" class="badge hidden">LIVE</span></h2>
+      </div>
+      <input id="twitchChannelInput" placeholder="Channel name" style="width:100%;margin-bottom:8px;">
+      <div class="row" style="gap:6px;margin-bottom:8px;flex-wrap:nowrap;">
         <button id="twitchPlayerBtn" class="secondary" style="flex:1;">▶ Watch</button>
         <button id="twitchChatBtn" class="secondary" style="flex:1;">💬 Chat</button>
       </div>
-      <div id="twitchInfo" class="upload-note"></div>
+      <div id="twitchInfo" class="hint"></div>
       <details class="add-src">
-        <summary>Live viewer count (optional)</summary>
-        <label for="twitchClientId">Twitch Client ID</label>
-        <input id="twitchClientId" placeholder="Client ID" autocomplete="off">
-        <label for="twitchToken">Twitch OAuth token</label>
-        <input id="twitchToken" type="password" placeholder="Paste token (stored encrypted)" autocomplete="off">
-        <button id="saveTwitchApiBtn" class="secondary">Save &amp; start tracking</button>
-        <div class="upload-note">Get both from dev.twitch.tv. The token is encrypted with your OS keychain and never shown again.</div>
+        <summary>Viewer count (optional)</summary>
+        <input id="twitchClientId" placeholder="Client ID (from dev.twitch.tv)" autocomplete="off">
+        <input id="twitchToken" type="password" placeholder="OAuth token (stored encrypted)" autocomplete="off">
+        <button id="saveTwitchApiBtn" class="secondary">Save</button>
       </details>
-    </div>
+    </section>
   </div>
 </div>
 
 <div class="bottom-grid">
-  <section class="panel" id="soundboardPanel">
+  <section class="panel" id="soundboardPanel" data-panel="soundboard">
     <div class="panel-head">
-      <h2>🎛️ Soundboard</h2>
-      <div class="ph-tools"><button class="secondary icon" id="sbStopAllBtn">⏹ Stop All</button></div>
+      <h2>Soundboard</h2>
+      <div class="ph-tools"><button class="secondary icon" id="sbStopAllBtn" title="Stop every sound">⏹ Stop all</button></div>
     </div>
     <div class="sb-tabs" id="sbTabs"></div>
     <div class="sb-grid" id="sbGrid"></div>
-    <div class="upload-note" style="margin-top:10px;">Plays through hidden browser sources in whichever scene is live. Up to <span id="sbPoolSizeNote"></span> sounds overlap at once. Drag tiles to reorder • double-click a board tab to rename • click a looping sound again to stop it.</div>
-
-    <div class="prop-section" style="margin-top:14px;">
-      <div class="prop-section-title collapsible" id="sbLibraryToggle">
-        <span>Sound Library <span id="sbLibraryCount" class="muted"></span></span>
-        <span id="sbLibraryCaret">▸</span>
-      </div>
-      <div id="sbLibraryList" class="scroll-list hidden" style="max-height:220px;"></div>
-    </div>
+    <details class="add-src" id="sbLibraryDetails">
+      <summary>Sound library <span id="sbLibraryCount" class="muted"></span></summary>
+      <div id="sbLibraryList" class="scroll-list" style="max-height:220px;"></div>
+    </details>
   </section>
 
-  <section class="panel" id="macrosPanel">
+  <section class="panel" id="macrosPanel" data-panel="macros">
     <div class="panel-head">
-      <h2>⚡ Macros</h2>
+      <h2>Macros</h2>
     </div>
     <div class="sb-grid" id="macroGrid"></div>
-    <div class="upload-note" style="margin-top:10px;">A macro runs several actions in a row — switch scene, show/hide sources, mute, play a sound, start recording, wait, and more.</div>
   </section>
 </div>
 
-<section class="panel">
+<section class="panel" data-panel="log">
   <div class="panel-head">
-    <h2>📜 Activity Log</h2>
+    <h2>Activity log</h2>
     <div class="ph-tools"><button class="secondary icon" id="clearLogBtn">Clear</button></div>
   </div>
   <div id="activityLogList" class="scroll-list" style="max-height:180px;"><div class="empty-note">Nothing yet.</div></div>
@@ -365,7 +396,7 @@
     </div>
     <div id="sbModeUrl" class="prop-row hidden">
       <input type="text" id="sbFieldUrl" placeholder="https://.../sound.mp3" style="width:100%;">
-      <div class="upload-note" style="margin-top:4px;">Must be a direct link to an audio file, not a webpage.</div>
+      
     </div>
     <button type="button" class="secondary" id="sbPreviewBtn" style="width:100%;">🎧 Preview on this PC</button>
   </div>
@@ -442,7 +473,6 @@
     <button class="secondary icon" id="previewClose">✕</button>
   </div>
   <img id="previewImg" alt="" style="display:block;border-radius:6px;background:#000;width:100%;">
-  <div class="upload-note" style="margin-top:6px;">What this one source is rendering right now, on its own.</div>
 </div>
 
 <div class="hidden floating" id="propsPanel">
@@ -464,10 +494,6 @@
 
   <div class="prop-section">
     <div class="prop-section-title">Transform</div>
-    <div class="size-mode-toggle">
-      <button id="modePctBtn" class="active">Percentage (%)</button>
-      <button id="modeRatioBtn">Ratio (Scale)</button>
-    </div>
     <div class="row" style="flex-wrap:nowrap;">
       <div style="flex:1;min-width:0;"><label id="labelScaleX" for="propScaleX">Scale X (%)</label><input type="number" id="propScaleX" step="any" style="width:100%;"></div>
       <div style="flex:1;min-width:0;"><label id="labelScaleY" for="propScaleY">Scale Y (%)</label><input type="number" id="propScaleY" step="any" style="width:100%;"></div>
@@ -516,6 +542,7 @@
 <script src="js/soundboard.js"></script>
 <script src="js/macros.js"></script>
 <script src="js/twitch.js"></script>
+<script src="js/settings.js"></script>
 <script src="js/palette.js"></script>
 <script src="js/profiles.js"></script>
 <script src="js/main.js"></script>

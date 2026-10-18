@@ -108,7 +108,7 @@ function renderSceneTabs(){
     strip.appendChild(tab);
   });
   const editLabel=$('editingLabel');
-  if(editLabel) editLabel.textContent=editingScene ? (editingScene===currentProgramScene ? `Editing: ${editingScene} (live)` : `Editing: ${editingScene}`) : '';
+  if(editLabel) editLabel.textContent=editingScene ? '· '+editingScene+(editingScene===currentProgramScene?' (live)':'') : '';
 }
 
 function setSceneHotkey(sceneName, combo){
@@ -135,7 +135,7 @@ async function deleteScene(name){
 }
 
 async function refreshSceneThumbs(){
-  if(!isConnected() || document.hidden) return;
+  if(!isConnected() || document.hidden || !PREFS.thumbs || !panelVisible('scenes')) return;
   for(const s of scenesData){
     if(!isConnected()) return;
     const data=await req('GetSourceScreenshot',{sourceName:s.sceneName,imageFormat:'jpg',imageWidth:320,imageCompressionQuality:70});
@@ -147,7 +147,7 @@ async function refreshSceneThumbs(){
     if(img) img.src=data.imageData;
   }
 }
-function startThumbLoop(){ stopThumbLoop(); refreshSceneThumbs(); thumbTimer=setInterval(refreshSceneThumbs, 5000); }
+function startThumbLoop(){ stopThumbLoop(); if(!PREFS.thumbs) return; refreshSceneThumbs(); thumbTimer=setInterval(refreshSceneThumbs, 5000); }
 function stopThumbLoop(){ clearInterval(thumbTimer); thumbTimer=null; }
 
 // ---- Toolbar ----
