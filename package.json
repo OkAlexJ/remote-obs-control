@@ -1,13 +1,14 @@
 {
   "name": "remote-obs-control",
-  "version": "1.0.0",
-  "description": "Remote OBS Control — desktop app with profiles, soundboard, and OBS WebSocket control",
+  "version": "1.1.0",
+  "description": "Remote OBS Control — control OBS on another PC: scenes, sources, audio, stream/record, soundboard, macros, profiles",
   "main": "main.js",
   "author": "You",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
     "start": "electron .",
+    "mock-obs": "node tools/mock-obs.js 4455 test",
     "build:win": "electron-builder --win nsis",
     "build:win-portable": "electron-builder --win portable"
   },
@@ -26,7 +27,9 @@
       "package.json"
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "build/icon.ico"
     },
     "nsis": {

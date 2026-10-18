@@ -1,100 +1,100 @@
 # Remote OBS Control — Desktop App
 
-## Run it (development)
+Control OBS on another PC (over your LAN or Tailscale) through obs-websocket v5: scenes, sources,
+audio, streaming/recording, a soundboard and macros — with per-person profiles.
+
+## Run it
 ```
 npm install
 npm start
 ```
-This opens the real app in an Electron window on your PC.
 
-## Build the Windows installer (.exe)
-Run this **on a Windows PC** (packaging a Windows installer reliably needs a
-Windows machine, or Wine on Linux/Mac — that step can't be done from a sandbox):
+### Try it without OBS
+A fake OBS ships with the project, so you can click around without a second PC:
 ```
-npm install
-npm run build:win
+npm run mock-obs
 ```
-The installer lands in `dist\Remote OBS Control Setup <version>.exe`. It's a
-normal NSIS installer — Next-Next-Finish, with desktop/Start Menu shortcuts.
+Then connect to host `localhost`, port `4455`, password `test` (or run `node tools/mock-obs.js 4455` for no password).
 
-There's also `npm run build:win-portable` for a single portable .exe that
-needs no installation.
+## Build the Windows installer
+```
+npm run build:win            # dist\Remote OBS Control Setup <version>.exe
+npm run build:win-portable   # single portable .exe
+```
 
-## What's actually implemented in this pass
+## Features
 
-- **Real Electron app**, not a website in a wrapper: separate main/renderer/preload
-  processes, `contextIsolation` on, no Node access from the page itself.
-- **Window state memory** — size, position, and maximized state persist across
-  launches (`main.js`, saved to your Windows user-data folder).
-- **Netflix-style profile launcher** on startup — pick a profile, it loads that
-  profile's saved data and auto-connects to its linked OBS instance.
-- **Profiles** — name, description, emoji avatar, last-used time, linked OBS
-  connection. Create / edit / delete from the launcher.
-- **Global OBS connections**, reusable across profiles — add once ("Streaming
-  PC", "Laptop", etc.), pick which one each profile uses.
-- **Encrypted passwords** — OBS WebSocket passwords are encrypted at rest via
-  Electron's `safeStorage` (backed by Windows' DPAPI / macOS Keychain / Linux
-  keyring), decrypted only in the main process right when a profile connects.
-  The renderer never reads or stores the encrypted blob.
-- **Per-profile data** — the soundboard (boards, buttons, sound library), the
-  audio-activity graph's custom line colors, scene hotkeys, and the activity
-  log are all stored per profile, on disk (`store-<profileId>.json` in your
-  user-data folder). Switching profiles switches all of this.
-- **Toast notifications** — small popups in the corner for connect/disconnect,
-  scene changes, and profile switches.
-- **Activity log** — a running, timestamped list of what's happened (scene
-  changes, source show/hide, sounds played, connect/disconnect), with a Clear
-  button. Lives in its own panel below the soundboard.
-- **Global search (Ctrl+K)** — a command palette to jump to any scene, toggle
-  any source, or play any soundboard button by typing its name.
-- **Quick profile switcher (Ctrl+P)** — a small popup to jump straight to
-  another profile without going back to the full launcher screen.
-- **Scene hotkeys** — click the ⌨ button on any scene tab to bind a key
-  combo that goes live on that scene from anywhere in the app. Conflict
-  detection against both scene hotkeys and soundboard hotkeys.
-- **Audio Activity line colors** — click the small color swatch next to any
-  source in the Audio Activity legend to recolor its line; it's saved with
-  the profile.
-- Everything from before (scene/source control, transforms, soundboard
-  playback via the hidden browser-source pool, etc.) still works unchanged.
+**Connection**
+- Profiles launcher (Netflix-style) — each profile has its own soundboard, macros, hotkeys, graph settings,
+  Twitch settings and activity log. Number keys 1–9 open a profile.
+- Saved OBS connections with **Test connection**, editable host/port/password, and passwords
+  encrypted with the OS keychain (Electron `safeStorage`).
+- **Auto-reconnect** with back-off if the link drops; clear messages for wrong password / unreachable host.
+- 💾 button saves whatever you typed in the top bar back into the profile.
 
-## Latest polish pass
+**Live control**
+- **Go Live / Record / Pause / Replay buffer (+ Save clip) / Virtual cam** with running timers.
+- Live **stats**: FPS, CPU, RAM, dropped frames, stream bitrate (turns yellow/red on congestion).
+- **Studio mode**: preview vs. live badges, Transition button, transition type + duration.
+- Scenes: thumbnails, double-click to go live, right-click to rename/delete, ＋ Scene, per-scene hotkeys.
+- **Everything syncs both ways** — changes made directly in OBS (scene switches, mutes, volumes,
+  source visibility, moved sources, new/removed sources) show up immediately.
 
-- New look: gradient backdrop, glow on the active scene, smoother buttons, focus rings, styled scrollbars, pulsing LIVE dot
-- **Duplicate** button in the profile editor (copies the soundboard too)
-- Esc closes the profile editor; Enter in the name box saves
-- Single-instance lock, no white flash on launch, blocked pop-ups/navigation
+**Layout editor**
+- Drag sources, resize with 8 handles (Shift = keep aspect, Ctrl = from center), **snapping** to edges/centre
+  (hold Alt to disable), arrow-key nudging, Delete to remove, Ctrl+scroll to zoom.
+- Correct for OBS alignment, bounding boxes and **rotation**.
+- Drag-and-drop **layer reordering**, right-click menu (bring to front, fit, center…).
+- Properties: scale/position/rotation, Fit / Center / Reset, **filters on/off**, media playback + scrub, source settings.
+- Add existing sources, browser/image/text/**color** sources, or upload an HTML/image file from this PC.
+- 📸 Save a full-resolution screenshot of a scene.
 
-## Big update
+**Audio**
+- Mixer with **dB faders** (double-click = 0 dB), meters with peak hold, mute.
+- Activity graph (line/area/bars/dots), crisp on high-DPI screens; selection and colours saved per profile.
 
-- **5 themes** (Violet, Ocean, Sunset, Forest, Light) — click 🎨 or press Ctrl+Shift+T; remembered next launch
-- **Profile export / import** — Export button in the profile editor, Import button on the launcher (OBS password is never put in the file)
-- **Keep on top** pin — 📌 or Ctrl+T, handy when OBS or a game is full screen next to it
-- **Shortcuts help** — press ? or click the ? button
-- Bigger scene thumbnails, rounder stage, cleaner spacing
+**Soundboard**
+- Multiple boards, drag to reorder, drag a tile onto another board's tab to move it, right-click menu.
+- Upload / URL / reuse sounds; preview locally; loop / restart-instead-of-stack; hotkeys.
+- Real sound lengths are measured, so the "playing" glow lasts the right time; click a looping sound to stop it.
 
-## What's NOT built yet
+**⚡ Macros (new)**
+- Chain steps: go live on scene, preview, transition, show/hide/toggle source, mute/unmute/toggle,
+  set volume, change a text source, play a sound, stop sounds, wait, start/stop stream, record
+  (start/stop/pause/resume), save replay, virtual cam. Hotkeys, test-run, duplicate.
 
-Still-large pieces from your original doc, deliberately left for a later pass:
+**Everywhere**
+- **Ctrl+K** command palette (scenes, sources, mutes, sounds, macros, stream/record actions…).
+- **Ctrl+P** profile switcher, **Ctrl+Shift+T** themes (Violet, Ocean, Sunset, Forest, Light), **Ctrl+T** keep on top, **?** help.
+- Twitch: open the stream and chat in their own windows; optional live viewer count/title/uptime
+  (token stored encrypted, requests made from the main process).
 
-- Macro system (multi-step actions, visual editor, delays/conditions)
-- Media library (centralized image/video management beyond soundboard sounds)
-- Customizable widget-based dashboard / multiple pages
-- First-launch setup wizard
-- Multi-OBS *simultaneous* control (one profile = one active connection at a
-  time — that's what profile switching covers, but there's no side-by-side
-  dual-OBS view)
+## Notes / trade-offs
+- If `safeStorage` isn't available (rare, some Linux setups) secrets fall back to base64 and are marked `b64:` in the file.
+- Soundboard sounds play through hidden 8×8 browser sources ("Soundboard Player N") in the live scene; they're hidden
+  from the app's sources list and mixer. Keep sound files under 10 MB — each play sends the file to OBS.
+- The audio graph shows volume over time, not a frequency spectrum (obs-websocket doesn't expose FFT data).
+- For testing, `ROC_USER_DATA=<folder>` makes the app use a throwaway data folder.
 
-## Notes / honesty about trade-offs
-
-- The connection **status dot** on each profile card in the launcher reflects
-  whether a connection is *linked*, not a live ping — it doesn't open a socket
-  just to render the grid.
-- If Electron's `safeStorage.isEncryptionAvailable()` is false (rare — some
-  Linux setups without a keyring), it falls back to base64 rather than true
-  encryption. That's flagged in code (`main.js`) so it's not a silent
-  weakening of the security you asked for.
-- The soundboard's "playing" pulse animation still uses a timer estimate, not
-  a real playback-finished signal — noted before, unchanged.
-- The activity log caps at 200 entries per profile (oldest drop off) to keep
-  the saved file small.
+## Project layout
+```
+main.js            Electron main process (storage, encryption, dialogs, Twitch windows)
+preload.js         The only bridge the page gets (window.desktop)
+renderer/
+  index.html       Markup
+  styles.css       Themes + styles
+  js/util.js       Helpers, dialogs, context menu, toasts, per-profile storage, activity log
+  js/obs.js        obs-websocket connection, requests, events, auto-reconnect
+  js/hotkeys.js    Hotkey recording/conflicts + the single keyboard handler
+  js/scenes.js     Scenes, studio mode, transitions
+  js/stage.js      Layout editor, sources list, properties panel, adding sources
+  js/audio.js      Mixer, meters, activity graph
+  js/outputs.js    Stream / record / replay / virtual cam + stats
+  js/soundboard.js Soundboard
+  js/macros.js     Macros
+  js/twitch.js     Twitch
+  js/palette.js    Command palette, profile switcher, themes, help
+  js/profiles.js   Profile launcher + editor
+  js/main.js       Startup and connect/disconnect wiring
+tools/mock-obs.js  Fake OBS for development
+```

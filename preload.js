@@ -21,8 +21,20 @@ contextBridge.exposeInMainWorld('desktop', {
     get: (profileId) => ipcRenderer.invoke('store:get', profileId),
     set: (profileId, data) => ipcRenderer.invoke('store:set', profileId, data)
   },
+  secrets: {
+    set: (profileId, key, value) => ipcRenderer.invoke('secrets:set', profileId, key, value),
+    has: (profileId, key) => ipcRenderer.invoke('secrets:has', profileId, key)
+  },
+  twitch: {
+    status: (profileId, channel, clientId) => ipcRenderer.invoke('twitch:status', profileId, channel, clientId),
+    open: (kind, channel) => ipcRenderer.invoke('twitch:open', kind, channel)
+  },
+  files: {
+    saveImage: (dataUrl, name) => ipcRenderer.invoke('file:saveImage', dataUrl, name)
+  },
   win: { togglePin: () => ipcRenderer.invoke('window:togglePin') },
   app: {
-    getLastProfile: () => ipcRenderer.invoke('app:getLastProfile')
+    getLastProfile: () => ipcRenderer.invoke('app:getLastProfile'),
+    version: () => ipcRenderer.invoke('app:version')
   }
 });

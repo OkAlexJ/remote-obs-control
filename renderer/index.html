@@ -2,316 +2,62 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob: https: http:; connect-src 'self' ws: wss:; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Remote OBS Control</title>
 <meta name="theme-color" content="#7c5cff">
-<style>
-  :root{
-    --bg:#151517; --panel:#1e1f23; --border:#2e2f34; --text:#e8e8ea;
-    --muted:#9a9aa2; --accent:#7c5cff; --text-src:#3fbf6f; --danger:#ff5c5c; --live:#ff4d4d;
-  }
-  *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:20px;}
-  h1{font-size:18px;margin:0 0 4px;}
-  .sub{color:var(--muted);font-size:13px;margin-bottom:18px;}
-  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end;}
-  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;}
-  input,select,textarea{background:#101012;border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:6px;font-size:13px;}
-  input{width:150px;}
-  textarea{width:100%;height:60px;resize:none;}
-  button{background:var(--accent);color:#fff;border:none;padding:9px 16px;border-radius:6px;font-size:13px;cursor:pointer;}
-  button:hover{opacity:.9;}
-  button.secondary{background:#2e2f34;}
-  button.icon{padding:5px 8px;font-size:12px;}
-  button:disabled{opacity:.4;cursor:not-allowed;}
-  .status{display:flex;align-items:center;gap:12px;font-size:13px;margin-top:10px;color:var(--muted);}
-  .dot{width:9px;height:9px;border-radius:50%;background:#666;flex-shrink:0;}
-  .dot.ok{background:#3fbf6f;} .dot.err{background:var(--danger);} .dot.pending{background:#e0b23f;} .dot.live{background:var(--live);}
-  .hidden{display:none !important;}
-  .err-box{background:#3a1414;border:1px solid #642626;color:#ffb4b4;padding:10px 12px;border-radius:6px;font-size:12px;margin-top:10px;line-height:1.5;}
-
-  .viewer-count{background:#101012;border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-weight:bold;color:#3fbf6f;}
-
-  .scene-strip{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;}
-  .scene-tab{position:relative;flex-shrink:0;width:140px;border:2px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;background:#0b0b0d;}
-  .scene-tab.active{border-color:var(--accent);}
-  .scene-tab .thumb{width:100%;height:78px;background:#000 repeating-conic-gradient(#161616 0% 25%,#101010 0% 50%) 50%/16px 16px;object-fit:cover;display:block;}
-  .scene-tab .name{font-size:12px;padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .scene-tab .live-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--live);box-shadow:0 0 6px var(--live);}
-  .scene-tab .go-live{position:absolute;bottom:26px;right:6px;font-size:10px;padding:3px 6px;opacity:0;transition:opacity .15s;}
-  .scene-tab:hover .go-live{opacity:1;}
-
-  .main{display:flex;gap:16px;align-items:flex-start;}
-  .stage-wrap{flex:1;min-width:0;overflow:auto;border:1px solid var(--border);border-radius:8px;background:#0b0b0d;}
-  .stage{position:relative;background:#000;background-size:cover;background-position:center;}
-  .item{position:absolute;border:2px solid #888;cursor:grab;background:transparent;box-shadow:0 0 0 1px rgba(0,0,0,.6);}
-  .item:hover{border-color:#fff;}
-  .item:active{cursor:grabbing;}
-  .item.text{border-color:var(--text-src);}
-  .item.locked{cursor:not-allowed;opacity:.6;}
-  .item.hidden-src{border-style:dashed;opacity:.4;}
-  .item.flash{outline:3px solid #fff;outline-offset:2px;z-index:999;}
-  .item .tag{background:#000c;font-size:10px;padding:2px 5px;color:#fff;white-space:nowrap;pointer-events:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
-  .item.text .tag{background:#0a2e18cc;}
-  .legend{font-size:12px;color:var(--muted);margin:10px 0;display:flex;gap:16px;flex-wrap:wrap;}
-  .legend span{display:inline-flex;align-items:center;gap:6px;}
-  .swatch{width:10px;height:10px;border-radius:2px;display:inline-block;}
-
-  .item.selected{border-color:#fff;box-shadow:0 0 0 2px #fff, 0 0 0 4px rgba(124,92,255,.6);}
-  .handle{position:absolute;width:10px;height:10px;background:#fff;border:1px solid #000;border-radius:2px;z-index:10;}
-  .handle.nw{top:-5px;left:-5px;cursor:nwse-resize;}
-  .handle.n{top:-5px;left:calc(50% - 5px);cursor:ns-resize;}
-  .handle.ne{top:-5px;right:-5px;cursor:nesw-resize;}
-  .handle.e{top:calc(50% - 5px);right:-5px;cursor:ew-resize;}
-  .handle.se{bottom:-5px;right:-5px;cursor:nwse-resize;}
-  .handle.s{bottom:-5px;left:calc(50% - 5px);cursor:ns-resize;}
-  .handle.sw{bottom:-5px;left:-5px;cursor:nesw-resize;}
-  .handle.w{top:calc(50% - 5px);left:-5px;cursor:ew-resize;}
-
-  .sidebar{width:300px;flex-shrink:0;display:flex;flex-direction:column;gap:16px;}
-  .sb-panel h2{font-size:13px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;display:flex;justify-content:space-between;align-items:center;}
-  .scroll-list{max-height:360px;overflow-y:auto;padding-right:4px;}
-  .src-row,.aud-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px;}
-  .src-row.flash{background:rgba(124,92,255,.35);border-radius:6px;padding-left:6px;padding-right:6px;margin-left:-6px;margin-right:-6px;transition:background .3s ease;}
-  .src-row:last-child,.aud-row:last-child{border-bottom:none;}
-  .src-name,.aud-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
-  .aud-name{cursor:default;}
-  .toggle-btn{width:26px;height:26px;border-radius:5px;border:1px solid var(--border);background:#101012;color:var(--text);font-size:12px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
-  .toggle-btn.off{opacity:.35;}
-  .toggle-btn.muted{background:var(--danger);border-color:var(--danger);color:#fff;}
-  .toggle-btn.danger:hover{background:var(--danger);border-color:var(--danger);color:#fff;}
-  .aud-col{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}
-  .aud-top{display:flex;justify-content:space-between;align-items:center;gap:6px;}
-  input[type=range]{width:100%;accent-color:var(--accent);}
-  
-  .meter-container{width:100%;height:6px;background:#101012;border-radius:3px;overflow:hidden;margin-top:2px;border:1px solid #222;}
-  .meter-bar{height:100%;width:0%;background:linear-gradient(to right, #3fbf6f 60%, #e0b23f 85%, #ff5c5c 100%);transition:width 0.05s linear;}
-
-  .stream-sidebar{width:340px;flex-shrink:0;display:flex;flex-direction:column;gap:16px;}
-  .stream-frame{width:100%;height:220px;border:none;border-radius:6px;background:#000;}
-
-  .empty-note{color:var(--muted);font-size:12px;}
-  .add-src{border-top:1px solid var(--border);margin-top:10px;padding-top:12px;display:flex;flex-direction:column;gap:8px;}
-  .add-src select,.add-src input{width:100%;}
-  .add-src .row{gap:8px;}
-  .upload-src{border-top:1px dashed var(--border);margin-top:12px;padding-top:12px;display:flex;flex-direction:column;gap:8px;}
-  .upload-src select,.upload-src input{width:100%;}
-  .upload-note{font-size:11px;color:var(--muted);line-height:1.4;}
-  .checkbox-row{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
-  .checkbox-row input{width:auto;}
-
-  .zoom-row{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
-  .zoom-group{display:flex;align-items:center;gap:6px;}
-  .zoom-row button{padding:6px 12px;}
-  .zoom-label{font-size:12px;color:var(--muted);min-width:42px;text-align:center;}
-  .fps-select{padding:4px 8px;font-size:12px;}
-  .stage-wrap{max-height:70vh;}
-
-  #propsPanel{position:fixed;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;width:320px;max-width:92vw;max-height:80vh;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:1000;}
-  #previewPanel{position:fixed;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;width:320px;max-width:92vw;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:1000;}
-  #propsPanel h3{margin:0 0 4px;font-size:14px;}
-  #propsPanel .kind{color:var(--muted);font-size:11px;margin-bottom:12px;}
-  .prop-section{border-top:1px solid var(--border);padding-top:10px;margin-top:10px;}
-  .prop-section-title{font-size:11px;color:var(--accent);font-weight:bold;margin-bottom:8px;text-transform:uppercase;}
-  .prop-row{margin-bottom:10px;}
-  .prop-row label{font-size:11px;color:var(--muted);margin-bottom:3px;display:block;}
-  .prop-row input[type=text],.prop-row input[type=number]{width:100%;}
-  .prop-row input[type=checkbox]{width:auto;}
-  .size-mode-toggle{display:flex;gap:4px;margin-bottom:8px;}
-  .size-mode-toggle button{flex:1;padding:4px;font-size:11px;}
-  .size-mode-toggle button.active{background:var(--accent);}
-  .size-mode-toggle button:not(.active){background:#101012;color:var(--muted);}
-  .media-controls{display:flex;gap:6px;align-items:center;margin-top:6px;}
-  .media-controls button{padding:6px 10px;font-size:11px;}
-  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
-  .api-box{display:flex;flex-direction:column;gap:6px;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;}
-  .api-box input{width:100%;}
-
-  button.danger, button.secondary.danger{background:var(--danger);color:#fff;}
-  button.danger:hover, button.secondary.danger:hover{opacity:.85;}
-
-  .sb-tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
-  .sb-tab{padding:6px 14px;border-radius:999px;background:#101012;border:1px solid var(--border);color:var(--muted);font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:6px;}
-  .sb-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-  .sb-tab .sb-tab-close{opacity:.6;font-size:11px;}
-  .sb-tab .sb-tab-close:hover{opacity:1;}
-  .sb-tab-add{padding:6px 12px;border-radius:999px;background:transparent;border:1px dashed var(--border);color:var(--muted);font-size:12.5px;cursor:pointer;}
-  .sb-tab-add:hover{color:var(--text);border-color:var(--accent);}
-
-  .sb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;}
-  .sb-btn{position:relative;aspect-ratio:1/1;border-radius:12px;border:1px solid rgba(255,255,255,.08);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px;overflow:hidden;color:#fff;text-align:center;transition:transform .08s ease;}
-  .sb-btn:active{transform:scale(.95);}
-  .sb-btn .sb-icon{font-size:26px;line-height:1;}
-  .sb-btn .sb-name{font-size:11.5px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.4);}
-  .sb-btn .sb-hotkey{position:absolute;top:5px;left:6px;font-size:9px;background:#0006;padding:1px 5px;border-radius:4px;}
-  .sb-btn .sb-edit{position:absolute;top:5px;right:5px;font-size:11px;background:#0007;border-radius:5px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;}
-  .sb-btn:hover .sb-edit{opacity:1;}
-  .sb-btn.playing{animation:sbPulse 1s ease-in-out infinite;box-shadow:0 0 0 3px #fff inset;}
-  @keyframes sbPulse{0%,100%{filter:brightness(1);}50%{filter:brightness(1.35);}}
-  .sb-add-tile{aspect-ratio:1/1;border-radius:12px;border:1px dashed var(--border);background:transparent;color:var(--muted);font-size:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
-  .sb-add-tile:hover{color:var(--text);border-color:var(--accent);}
-
-  .sb-source-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;}
-  .sb-source-row:last-child{border-bottom:none;}
-  .sb-source-row .sb-source-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .sb-source-row .sb-source-kind{color:var(--muted);font-size:10.5px;}
-
-  #sbModalBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;}
-  #sbButtonModal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;width:360px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:1000;}
-  #sbButtonModal h3{margin:0 0 12px;font-size:14px;}
-
-  /* Profile launcher */
-  #profileLauncher{position:fixed;inset:0;background:radial-gradient(ellipse at top,#1a1a1e,#0b0b0d 65%);z-index:1500;display:flex;align-items:center;justify-content:center;overflow-y:auto;}
-  .pl-wrap{padding:40px 20px;text-align:center;max-width:1000px;}
-  .pl-title{font-size:28px;font-weight:600;margin-bottom:36px;color:var(--text);}
-  .pl-grid{display:flex;flex-wrap:wrap;gap:22px;justify-content:center;}
-  .pl-card{width:150px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);}
-  .pl-avatar{width:120px;height:120px;border-radius:14px;background:linear-gradient(160deg,#2a2b30,#17181b);display:flex;align-items:center;justify-content:center;font-size:52px;border:2px solid transparent;transition:border-color .15s,transform .1s;position:relative;}
-  .pl-card:hover .pl-avatar{border-color:var(--accent);transform:scale(1.04);}
-  .pl-name{font-size:13.5px;color:var(--text);font-weight:600;}
-  .pl-meta{font-size:10.5px;color:var(--muted);}
-  .pl-edit{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:6px;background:#0008;display:flex;align-items:center;justify-content:center;font-size:11px;opacity:0;transition:opacity .15s;}
-  .pl-avatar:hover .pl-edit{opacity:1;}
-  .pl-status-dot{position:absolute;bottom:6px;right:6px;width:10px;height:10px;border-radius:50%;background:#666;border:2px solid #17181b;}
-  .pl-status-dot.ok{background:var(--text-src);}
-  .pl-add .pl-avatar{border:2px dashed var(--border);background:transparent;color:var(--muted);font-size:36px;}
-  .pl-add:hover .pl-avatar{color:var(--text);}
-
-  .pl-avatar-picker{display:flex;flex-wrap:wrap;gap:6px;}
-  .pl-avatar-opt{width:34px;height:34px;border-radius:8px;background:#101012;border:1px solid var(--border);font-size:17px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
-  .pl-avatar-opt.active{border-color:var(--accent);background:#2a2440;}
-
-  #plModalBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1999;}
-  #plModal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;width:380px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:2000;}
-  #plModal h3{margin:0 0 12px;font-size:14px;}
-
-  /* Toast notifications */
-  #toastStack{position:fixed;bottom:20px;right:20px;z-index:3000;display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
-  .toast{background:#1e1f23;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--text);box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:320px;animation:toastIn .18s ease;}
-  .toast.ok{border-left-color:var(--text-src);}
-  .toast.err{border-left-color:var(--danger);}
-  @keyframes toastIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
-  .toast.leaving{animation:toastOut .18s ease forwards;}
-  @keyframes toastOut{to{opacity:0;transform:translateY(-4px);}}
-
-  /* Activity log */
-  .log-row{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;}
-  .log-row:last-child{border-bottom:none;}
-  .log-time{color:var(--muted);flex-shrink:0;width:64px;}
-
-  /* Command palette (Ctrl+K) / quick switcher (Ctrl+P) */
-  #paletteBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2499;}
-  #commandPalette{position:fixed;top:16%;left:50%;transform:translateX(-50%);width:520px;max-width:92vw;max-height:60vh;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,.55);z-index:2500;display:flex;flex-direction:column;overflow:hidden;}
-  #paletteInput{border:none;border-bottom:1px solid var(--border);background:transparent;padding:14px 16px;font-size:15px;color:var(--text);width:100%;outline:none;}
-  #paletteResults{overflow-y:auto;padding:6px;}
-  .palette-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;}
-  .palette-item.active,.palette-item:hover{background:#2a2b30;}
-  .palette-item .palette-kind{margin-left:auto;font-size:10px;color:var(--muted);text-transform:uppercase;}
-  .palette-empty{padding:16px;color:var(--muted);font-size:12.5px;text-align:center;}
-
-  #switcherBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2599;}
-  #quickSwitcher{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;width:360px;max-width:92vw;z-index:2600;box-shadow:0 20px 50px rgba(0,0,0,.55);}
-  #quickSwitcher h3{margin:0 0 10px;font-size:13px;color:var(--muted);text-transform:uppercase;}
-  .qs-row{display:flex;align-items:center;gap:10px;padding:8px;border-radius:6px;cursor:pointer;font-size:13px;}
-  .qs-row:hover,.qs-row.active{background:#2a2b30;}
-  .qs-avatar{font-size:18px;}
-
-/* ===== Polish pass ===== */
-:root{--bg:#0e0e11;--panel:#17181d;--border:#272830;--accent:#8b6cff;--accent2:#5cc8ff;--radius:12px;}
-body{background:radial-gradient(1200px 600px at 10% -10%,var(--glow1) 0%,transparent 60%),radial-gradient(900px 500px at 110% 0%,var(--glow2) 0%,transparent 55%),var(--bg);background-attachment:fixed;font-family:'Segoe UI Variable','Segoe UI',Inter,system-ui,sans-serif;letter-spacing:.005em;}
-.panel{border-radius:var(--radius);background:linear-gradient(180deg,#1b1c22,#15161b);box-shadow:0 8px 24px rgba(0,0,0,.35);}
-button{background:linear-gradient(135deg,var(--accent),var(--accent-dark));border-radius:8px;font-weight:600;transition:transform .12s,box-shadow .12s,opacity .12s;}
-button:hover{opacity:1;transform:translateY(-1px);box-shadow:0 6px 16px rgba(139,108,255,.35);}
-button:active{transform:translateY(0) scale(.98);}
-button.secondary{background:#262731;box-shadow:none;}
-button.secondary:hover{background:#30313d;box-shadow:none;}
-input,select,textarea{background:#0c0c10;border-radius:8px;transition:border-color .12s,box-shadow .12s;}
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,108,255,.25);}
-:focus-visible{outline:2px solid var(--accent2);outline-offset:2px;}
-.scene-tab{border-radius:10px;transition:transform .15s,border-color .15s,box-shadow .15s;}
-.scene-tab:hover{transform:translateY(-2px);}
-.scene-tab.active{box-shadow:0 0 0 1px var(--accent),0 6px 20px rgba(139,108,255,.35);}
-.dot.ok{box-shadow:0 0 8px #3fbf6f;} .dot.live{animation:livePulse 1.4s infinite;}
-@keyframes livePulse{0%,100%{box-shadow:0 0 0 0 rgba(255,77,77,.6)}50%{box-shadow:0 0 0 6px rgba(255,77,77,0)}}
-::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#34353f;border-radius:8px}::-webkit-scrollbar-thumb:hover{background:#4a4b58}::-webkit-scrollbar-track{background:transparent}
-#plModal{border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.65);}
-#plModalBackdrop{backdrop-filter:blur(6px);}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-
-/* ===== Themes ===== */
-:root{--glow1:#1d1838;--glow2:#10263a;--accent-dark:#6a4bf0;}
-html[data-theme="ocean"]{--bg:#0a1118;--panel:#111c27;--border:#1f3446;--accent:#2fb4ff;--accent2:#7cf0d0;--accent-dark:#0f86d1;--glow1:#0b2a44;--glow2:#0a3a3a;}
-html[data-theme="sunset"]{--bg:#140c10;--panel:#1f1318;--border:#3a222b;--accent:#ff7a59;--accent2:#ffc857;--accent-dark:#e0502a;--glow1:#3a1420;--glow2:#3a2a10;}
-html[data-theme="forest"]{--bg:#0b120d;--panel:#121c15;--border:#22362a;--accent:#3fcf7a;--accent2:#c6f26b;--accent-dark:#22a557;--glow1:#0f3320;--glow2:#26340f;}
-html[data-theme="light"]{--bg:#eef0f6;--panel:#ffffff;--border:#d8dbe6;--text:#1b1c24;--muted:#5d6174;--accent:#6b4cf0;--accent2:#1f8fe0;--accent-dark:#5136cc;--glow1:#dcd6ff;--glow2:#cfe9ff;}
-html[data-theme="light"] .panel{background:#fff;}
-html[data-theme="light"] input,html[data-theme="light"] select,html[data-theme="light"] textarea{background:#f5f6fa;color:var(--text);}
-html[data-theme="light"] button.secondary{background:#e5e7f0;color:#1b1c24;}
-
-/* ===== Layout upgrades ===== */
-body{padding:24px 28px 84px;}
-.main{gap:20px;}
-.scene-strip{gap:14px;padding:4px 2px 10px;scroll-snap-type:x proximity;}
-.scene-tab{width:172px;scroll-snap-align:start;}
-.scene-tab .thumb{height:96px;}
-.scene-tab .name{font-weight:600;padding:8px 10px;}
-.stage-wrap{border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.45);}
-.pl-grid{gap:20px;}
-
-/* ===== Floating dock + help ===== */
-#dock{position:fixed;right:18px;bottom:18px;display:flex;gap:8px;z-index:9000;padding:8px;border-radius:14px;background:color-mix(in srgb,var(--panel) 85%,transparent);border:1px solid var(--border);backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.5);}
-#dock button{padding:8px 11px;font-size:15px;line-height:1;}
-#dock button.on{outline:2px solid var(--accent2);}
-#helpBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);z-index:9500;}
-#helpBox{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;max-width:92vw;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:22px 24px;z-index:9501;box-shadow:0 24px 70px rgba(0,0,0,.65);}
-#helpBox h3{margin:0 0 12px;} #helpBox div{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;}
-#helpBox kbd{background:#0c0c10;color:#e8e8ea;border:1px solid #34353f;border-radius:6px;padding:2px 8px;font-size:12px;}
-#plImportRow{display:flex;gap:10px;justify-content:center;margin:0 0 16px;}
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<div id="toastStack"></div>
+<div id="toastStack" aria-live="polite"></div>
 
 <div id="dock">
   <button class="secondary" id="dockTheme" title="Change theme (Ctrl+Shift+T)">🎨</button>
   <button class="secondary" id="dockPin" title="Keep window on top (Ctrl+T)">📌</button>
   <button class="secondary" id="dockHelp" title="Keyboard shortcuts (?)">?</button>
 </div>
-<div class="hidden" id="helpBackdrop"></div>
-<div class="hidden" id="helpBox"><h3>Keyboard shortcuts</h3>
-  <div><span>Search scenes, sources, sounds</span><kbd>Ctrl + K</kbd></div>
-  <div><span>Switch profile</span><kbd>Ctrl + P</kbd></div>
-  <div><span>Change theme</span><kbd>Ctrl + Shift + T</kbd></div>
-  <div><span>Keep window on top</span><kbd>Ctrl + T</kbd></div>
-  <div><span>Show this help</span><kbd>?</kbd></div>
-  <div><span>Close any popup</span><kbd>Esc</kbd></div>
+
+<!-- ===== Generic dialogs (replaces prompt/confirm/alert, which Electron doesn't support well) ===== -->
+<div class="hidden backdrop" id="dialogBackdrop"></div>
+<div class="hidden modal" id="dialogBox" role="dialog" aria-modal="true">
+  <h3 id="dialogTitle"></h3>
+  <div id="dialogMessage" class="dialog-msg"></div>
+  <input type="text" id="dialogInput" class="hidden" style="width:100%;">
+  <div class="modal-actions">
+    <button class="secondary" id="dialogCancel">Cancel</button>
+    <button id="dialogOk">OK</button>
+  </div>
 </div>
 
+<div class="hidden backdrop" id="helpBackdrop"></div>
+<div class="hidden modal" id="helpBox" role="dialog" aria-modal="true"><h3>Keyboard shortcuts</h3>
+  <div class="kv"><span>Search everything (scenes, sources, sounds, macros, actions)</span><kbd>Ctrl + K</kbd></div>
+  <div class="kv"><span>Switch profile</span><kbd>Ctrl + P</kbd></div>
+  <div class="kv"><span>Change theme</span><kbd>Ctrl + Shift + T</kbd></div>
+  <div class="kv"><span>Keep window on top</span><kbd>Ctrl + T</kbd></div>
+  <div class="kv"><span>Nudge selected source (Shift = bigger steps)</span><kbd>Arrow keys</kbd></div>
+  <div class="kv"><span>Remove selected source from scene</span><kbd>Delete</kbd></div>
+  <div class="kv"><span>Snap to edges while dragging (hold to disable)</span><kbd>Alt</kbd></div>
+  <div class="kv"><span>Go live on a scene</span><kbd>Double-click its tab</kbd></div>
+  <div class="kv"><span>Show this help</span><kbd>?</kbd></div>
+  <div class="kv"><span>Close any popup / deselect</span><kbd>Esc</kbd></div>
+  <p class="upload-note" style="margin-top:12px;">Your own hotkeys for scenes (⌨ on a scene tab), soundboard buttons and macros work anywhere in the app while you're not typing in a field.</p>
+  <p class="upload-note" id="helpVersion"></p>
+</div>
 
-<div class="hidden" id="paletteBackdrop"></div>
-<div class="hidden" id="commandPalette">
-  <input type="text" id="paletteInput" placeholder="Search scenes, sources, soundboard buttons…">
+<div class="hidden backdrop" id="paletteBackdrop"></div>
+<div class="hidden" id="commandPalette" role="dialog" aria-modal="true">
+  <input type="text" id="paletteInput" placeholder="Search scenes, sources, sounds, macros, actions…" autocomplete="off">
   <div id="paletteResults"></div>
 </div>
 
-<div class="hidden" id="switcherBackdrop"></div>
-<div class="hidden" id="quickSwitcher">
+<div class="hidden backdrop" id="switcherBackdrop"></div>
+<div class="hidden" id="quickSwitcher" role="dialog" aria-modal="true">
   <h3>Switch Profile</h3>
   <div id="qsList"></div>
 </div>
 
-<div id="profileBar" class="hidden" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-  <div style="display:flex;align-items:center;gap:8px;">
-    <span id="profileBarAvatar" style="font-size:20px;"></span>
-    <strong id="profileBarName" style="font-size:14px;"></strong>
-  </div>
-  <div style="display:flex;gap:8px;">
-    <button class="secondary" id="openSearchBtn" title="Ctrl+K">🔎 Search</button>
-    <button class="secondary" id="openSwitcherBtn" title="Ctrl+P">🔀 Switch Profile</button>
-  </div>
-</div>
-
+<!-- ===== Profile launcher ===== -->
 <div id="profileLauncher" class="hidden">
   <div class="pl-wrap">
     <h1 class="pl-title">Who's controlling OBS?</h1>
@@ -320,11 +66,11 @@ body{padding:24px 28px 84px;}
   </div>
 </div>
 
-<div class="hidden" id="plModalBackdrop"></div>
-<div class="hidden" id="plModal">
+<div class="hidden backdrop" id="plModalBackdrop"></div>
+<div class="hidden modal" id="plModal" role="dialog" aria-modal="true">
   <h3 id="plModalTitle">New Profile</h3>
-  <div class="prop-row"><label>Name</label><input type="text" id="plFieldName" placeholder="Gaming"></div>
-  <div class="prop-row"><label>Description (optional)</label><input type="text" id="plFieldDesc" placeholder="Main gaming stream setup"></div>
+  <div class="prop-row"><label for="plFieldName">Name</label><input type="text" id="plFieldName" placeholder="Gaming" maxlength="60"></div>
+  <div class="prop-row"><label for="plFieldDesc">Description (optional)</label><input type="text" id="plFieldDesc" placeholder="Main gaming stream setup" maxlength="120"></div>
   <div class="prop-row">
     <label>Avatar</label>
     <div class="pl-avatar-picker" id="plAvatarPicker"></div>
@@ -335,21 +81,28 @@ body{padding:24px 28px 84px;}
     <div class="prop-row">
       <select id="plFieldConnection" style="width:100%;"></select>
     </div>
-    <div id="plNewConnFields" class="hidden" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+    <div id="plConnFields" class="hidden conn-fields">
       <input type="text" id="plConnName" placeholder="Connection name (e.g. Streaming PC)">
-      <div class="row" style="gap:8px;">
-        <input type="text" id="plConnHost" placeholder="Host / Tailscale IP" style="flex:2;">
-        <input type="text" id="plConnPort" placeholder="4455" style="flex:1;">
+      <div class="row" style="gap:8px;flex-wrap:nowrap;">
+        <input type="text" id="plConnHost" placeholder="Host / Tailscale IP" style="flex:2;min-width:0;">
+        <input type="text" id="plConnPort" placeholder="4455" style="flex:1;min-width:0;">
       </div>
       <input type="password" id="plConnPass" placeholder="Password (leave blank if none)">
+      <div class="row" style="gap:8px;justify-content:space-between;align-items:center;">
+        <button type="button" class="secondary" id="plConnTestBtn">🔌 Test connection</button>
+        <button type="button" class="secondary danger hidden" id="plConnDeleteBtn">Delete connection</button>
+      </div>
+      <div id="plConnTestResult" class="upload-note"></div>
     </div>
   </div>
 
   <div id="plModalErr" class="err-box hidden"></div>
   <div class="modal-actions" style="justify-content:space-between;">
-    <button class="secondary danger" id="plDeleteBtn" style="display:none;">Delete Profile</button>
-    <button class="secondary" id="plDupBtn" style="display:none;">Duplicate</button>
-    <button class="secondary" id="plExportBtn" style="display:none;">Export</button>
+    <div style="display:flex;gap:8px;">
+      <button class="secondary danger" id="plDeleteBtn" style="display:none;">Delete</button>
+      <button class="secondary" id="plDupBtn" style="display:none;">Duplicate</button>
+      <button class="secondary" id="plExportBtn" style="display:none;">Export</button>
+    </div>
     <div style="display:flex;gap:8px;">
       <button class="secondary" id="plModalCancel">Cancel</button>
       <button id="plModalSave">Save</button>
@@ -357,66 +110,115 @@ body{padding:24px 28px 84px;}
   </div>
 </div>
 
+<!-- ===== Main app ===== -->
 <div id="appRoot" class="hidden">
-<h1>Remote OBS Control</h1>
-<div class="sub">Connects directly to another PC's OBS over obs-websocket (v5) — no Companion needed.</div>
 
-
-<div class="panel">
-  <div class="row">
-    <div><label>Host / Tailscale IP</label><input id="host" placeholder="100.x.x.x"></div>
-    <div><label>Port</label><input id="port" value="4455" style="width:80px;"></div>
-    <div><label>Password</label><input id="pass" type="password" placeholder="(leave blank if none)"></div>
+<header class="topbar panel">
+  <div class="tb-profile" id="profileChip" title="Switch profile (Ctrl+P)">
+    <span id="profileBarAvatar" class="tb-avatar">🎬</span>
+    <div>
+      <div id="profileBarName" class="tb-name">Remote OBS Control</div>
+      <div class="tb-status"><span class="dot" id="statusDot"></span><span id="statusText">Not connected</span></div>
+    </div>
+  </div>
+  <div class="tb-conn">
+    <div><label for="host">Host / Tailscale IP</label><input id="host" placeholder="100.x.x.x" autocomplete="off"></div>
+    <div><label for="port">Port</label><input id="port" value="4455" style="width:72px;"></div>
+    <div><label for="pass">Password</label><input id="pass" type="password" placeholder="(blank if none)"></div>
     <button id="connectBtn">Connect</button>
+    <button class="secondary hidden" id="saveConnBtn" title="Save these connection details to this profile">💾</button>
   </div>
-  <div class="status">
-    <div class="dot" id="statusDot"></div>
-    <span id="statusText">Not connected</span>
-    <span id="viewerWrap" class="hidden">Live Viewers: <span id="viewerCount" class="viewer-count">--</span></span>
+  <div class="tb-actions">
+    <span id="viewerChip" class="chip hidden" title="Twitch viewers"></span>
+    <button class="secondary" id="openSearchBtn" title="Ctrl+K">🔎 Search</button>
+    <button class="secondary" id="openSwitcherBtn" title="Ctrl+P">🔀 Profiles</button>
   </div>
-  <div id="errBox" class="err-box hidden"></div>
-</div>
+</header>
+<div id="errBox" class="err-box hidden"></div>
 
-<div class="panel hidden" id="scenesPanel">
-  <h2 style="font-size:13px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;">Scenes</h2>
+<!-- Outputs: stream / record / replay / virtual cam + live stats -->
+<section class="panel outputs hidden" id="outputsPanel">
+  <div class="out-group">
+    <button class="out-btn" id="streamBtn" data-state="off"><span class="out-ico">📡</span><span class="out-label">Go Live</span><span class="out-time" id="streamTime"></span></button>
+    <button class="out-btn" id="recordBtn" data-state="off"><span class="out-ico">⏺</span><span class="out-label">Record</span><span class="out-time" id="recordTime"></span></button>
+    <button class="out-btn small hidden" id="recordPauseBtn" title="Pause / resume recording">⏸</button>
+    <button class="out-btn" id="replayBtn" data-state="off" title="Start / stop the replay buffer"><span class="out-ico">⏪</span><span class="out-label">Replay</span></button>
+    <button class="out-btn small hidden" id="replaySaveBtn" title="Save the last few seconds as a clip">💾 Clip</button>
+    <button class="out-btn" id="vcamBtn" data-state="off"><span class="out-ico">🎥</span><span class="out-label">Virtual Cam</span></button>
+  </div>
+  <div class="stats" id="statsRow">
+    <span title="Frames per second OBS is rendering">FPS <b id="statFps">–</b></span>
+    <span title="OBS CPU usage">CPU <b id="statCpu">–</b></span>
+    <span title="OBS memory usage">RAM <b id="statMem">–</b></span>
+    <span title="Frames dropped / skipped (render + encoding + network)">Dropped <b id="statDropped">–</b></span>
+    <span title="Current stream bitrate" id="statBitrateWrap" class="hidden">Bitrate <b id="statBitrate">–</b></span>
+  </div>
+</section>
+
+<!-- Shown until a connection is up -->
+<section class="panel empty-state" id="emptyState">
+  <div class="es-icon">🛰️</div>
+  <h2>Not connected to OBS</h2>
+  <p>Enter the address of the PC running OBS above and press <b>Connect</b>.</p>
+  <ol>
+    <li>In OBS on that PC: <b>Tools → WebSocket Server Settings</b> → tick <b>Enable WebSocket server</b>.</li>
+    <li>Use its IP (a Tailscale <code>100.x.x.x</code> address works great across networks) and port (default <b>4455</b>).</li>
+    <li>Click <b>Show Connect Info</b> in that window to see the password.</li>
+  </ol>
+  <p class="upload-note">Your soundboard and macros below can be set up while offline.</p>
+</section>
+
+<section class="panel hidden" id="scenesPanel">
+  <div class="panel-head">
+    <h2>Scenes <span class="badge hidden" id="studioBadge">STUDIO MODE</span></h2>
+    <div class="ph-tools">
+      <label class="inline-label" for="transitionSelect">Transition</label>
+      <select id="transitionSelect" class="fps-select"></select>
+      <input type="number" id="transitionDuration" class="fps-select" min="0" max="20000" step="50" style="width:84px;" title="Transition duration (ms)">
+      <span class="inline-label">ms</span>
+      <button class="secondary icon" id="studioToggleBtn" title="Toggle Studio Mode (preview before going live)">🎬 Studio</button>
+      <button class="hidden" id="transitionBtn" title="Send preview to program">⇄ Transition</button>
+      <button class="secondary icon" id="addSceneBtn" title="Create a new scene">＋ Scene</button>
+    </div>
+  </div>
   <div class="scene-strip" id="sceneStrip"></div>
-</div>
+</section>
 
 <div class="main hidden" id="mainArea">
-  <div>
-    <div class="legend">
-      <span><span class="swatch" style="background:var(--text-src);border:1px solid var(--text-src)"></span> Text source</span>
-      <span><span class="swatch" style="background:#666;border:1px solid #666"></span> Other source</span>
-      <span>Dashed = hidden &nbsp;•&nbsp; Faded = locked &nbsp;•&nbsp; ⚙ in Sources = properties &nbsp;•&nbsp; Drag borders to scale &nbsp;•&nbsp; Hold Shift to lock aspect ratio &nbsp;•&nbsp; Hold Ctrl to scale from center</span>
-    </div>
+  <div class="main-col">
     <div class="zoom-row">
       <div class="zoom-group">
-        <button class="secondary" id="zoomOutBtn">－</button>
+        <button class="secondary" id="zoomOutBtn" title="Zoom out">－</button>
         <span class="zoom-label" id="zoomLabel">100%</span>
-        <button class="secondary" id="zoomInBtn">＋</button>
+        <button class="secondary" id="zoomInBtn" title="Zoom in">＋</button>
         <button class="secondary" id="zoomResetBtn">Fit</button>
-        <button class="secondary" id="syncPosBtn" title="Pull the latest source positions/sizes from OBS">🔄 Sync positions</button>
+        <button class="secondary" id="syncPosBtn" title="Pull the latest source positions/sizes from OBS">🔄 Sync</button>
+        <button class="secondary" id="screenshotBtn" title="Save a full-resolution screenshot of this scene">📸 Screenshot</button>
       </div>
       <div class="zoom-group">
-        <label for="fpsSelect" style="margin:0;font-size:12px;">Preview Refresh:</label>
+        <span id="editingLabel" class="inline-label"></span>
+        <label for="fpsSelect" class="inline-label">Preview:</label>
         <select id="fpsSelect" class="fps-select">
-          <option value="max">Max (Uncapped)</option>
-          <option value="120">120 FPS</option>
-          <option value="60">60 FPS</option>
           <option value="30">30 FPS</option>
           <option value="15" selected>15 FPS</option>
           <option value="5">5 FPS</option>
           <option value="1">1 FPS</option>
+          <option value="0">Paused</option>
         </select>
       </div>
     </div>
-    <div class="stage-wrap"><div class="stage" id="stage"></div></div>
+    <div class="stage-wrap" id="stageWrap"><div class="stage" id="stage"></div></div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--text-src)"></span> Text</span>
+      <span><span class="swatch" style="background:#888"></span> Other source</span>
+      <span>Dashed = hidden • Faded = locked • Drag edges to scale • Shift = keep aspect • Ctrl = from center • Alt = no snapping</span>
+    </div>
 
     <div class="panel" style="margin-top:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;flex-wrap:wrap;gap:10px;">
-        <h2 style="font-size:13px;margin:0;color:var(--muted);text-transform:uppercase;">Audio Activity</h2>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <label for="vizStyleSelect" style="margin:0;font-size:12px;color:var(--muted);">Style:</label>
+      <div class="panel-head">
+        <h2>Audio Activity</h2>
+        <div class="ph-tools">
+          <label for="vizStyleSelect" class="inline-label">Style</label>
           <select id="vizStyleSelect" class="fps-select">
             <option value="line">Line</option>
             <option value="area">Filled area</option>
@@ -425,114 +227,127 @@ body{padding:24px 28px 84px;}
           </select>
         </div>
       </div>
-      <div class="upload-note" style="margin-bottom:8px;">Level history over time, not a frequency spectrogram — obs-websocket only exposes volume, not FFT data.</div>
-      <canvas id="audioVizCanvas" width="900" height="120" style="width:100%;height:120px;display:block;background:#0b0b0d;border:1px solid var(--border);border-radius:6px;"></canvas>
-      <div id="audioVizLegend" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted);"></div>
+      <canvas id="audioVizCanvas"></canvas>
+      <div id="audioVizLegend" class="viz-legend"></div>
+      <div class="upload-note" style="margin-top:6px;">Level history over the last ~10 seconds (obs-websocket only exposes volume, not frequency data).</div>
     </div>
   </div>
 
   <div class="sidebar">
     <div class="panel sb-panel">
-      <h2>Sources <button class="secondary icon" id="refreshSceneBtn">Refresh</button></h2>
+      <h2>Sources <span><button class="secondary icon" id="refreshSceneBtn" title="Reload this scene">↻</button></span></h2>
       <div id="sourceList" class="scroll-list"></div>
+      <div id="hiddenPlayersNote" class="upload-note hidden"></div>
 
-      <div class="add-src">
+      <details class="add-src" id="addSrcDetails">
+        <summary>＋ Add a source</summary>
         <select id="addType">
+          <option value="existing">Existing source (from another scene)</option>
           <option value="browser_source">Browser source (overlay URL)</option>
-          <option value="image_source">Image</option>
+          <option value="image_source">Image (file on their PC)</option>
           <option value="text_source">Text</option>
+          <option value="color_source">Color block</option>
         </select>
-        <input id="addName" placeholder="Source name">
-        <input id="addUrl" placeholder="https://... (overlay URL)">
+        <select id="addExisting"></select>
+        <input id="addName" class="hidden" placeholder="Source name">
+        <input id="addUrl" class="hidden" placeholder="https://... (overlay URL)">
         <input id="addFile" class="hidden" placeholder="C:\path\to\image.png (on their PC)">
-        <textarea id="addText" class="hidden" placeholder="Text to display..." style="height:60px;"></textarea>
-        <div class="row" id="addDims">
-          <input id="addW" placeholder="Width" value="1280" style="width:90px;">
-          <input id="addH" placeholder="Height" value="720" style="width:90px;">
+        <textarea id="addText" class="hidden" placeholder="Text to display..."></textarea>
+        <input type="color" id="addColor" class="hidden" value="#7c5cff" style="height:34px;padding:2px;">
+        <div class="row hidden" id="addDims">
+          <input id="addW" placeholder="Width" value="1280" style="width:90px;" title="Width">
+          <input id="addH" placeholder="Height" value="720" style="width:90px;" title="Height">
         </div>
         <button id="addBtn" style="width:100%;">Add to scene</button>
         <div id="addErr" class="err-box hidden" style="margin-top:8px;"></div>
-      </div>
+      </details>
 
-      <div class="upload-src">
-        <label style="font-size:12px;color:var(--muted);margin-bottom:2px;">Upload a file from my PC</label>
+      <details class="add-src">
+        <summary>⬆ Upload a file from my PC</summary>
         <input id="uploadName" placeholder="Source name">
         <input type="file" id="uploadFileInput" accept=".html,.htm,image/*">
-        <div class="checkbox-row"><input type="checkbox" id="uploadAudio"><label for="uploadAudio" style="margin:0;">This file has sound (route audio through OBS)</label></div>
+        <div class="checkbox-row"><input type="checkbox" id="uploadAudio"><label for="uploadAudio">This file has sound (route audio through OBS)</label></div>
         <button id="uploadFileBtn" style="width:100%;">Upload &amp; add to scene</button>
-        <div class="upload-note">Works for .html overlays and images (jpg/png/gif/webp/svg). The file is sent to their OBS as part of the source itself — nothing needs to be copied onto their PC by hand. Uses the Width/Height fields above.</div>
+        <div class="upload-note">Works for .html overlays and images. The file is embedded in the OBS source itself, so nothing needs to be copied onto their PC.</div>
         <div id="uploadErr" class="err-box hidden"></div>
-      </div>
+      </details>
     </div>
 
     <div class="panel sb-panel">
-      <h2>Audio Mixer <button class="secondary icon" id="refreshAudioBtn">Refresh</button></h2>
+      <h2>Audio Mixer <button class="secondary icon" id="refreshAudioBtn" title="Reload inputs">↻</button></h2>
       <div id="audioList" class="scroll-list"><div class="empty-note">Loading…</div></div>
     </div>
-  </div>
 
-  <!-- Live Stream Panel -->
-  <div class="stream-sidebar">
     <div class="panel sb-panel">
-      <h2>Live Twitch Stream</h2>
-      <div style="display:flex;gap:6px;margin-bottom:10px;">
-        <input id="twitchChannelInput" placeholder="Twitch Username" style="flex:1;">
-        <button id="loadStreamBtn" class="secondary" style="padding:6px 10px;">Load</button>
+      <h2>Twitch <span id="twitchLiveBadge" class="badge hidden">LIVE</span></h2>
+      <div class="row" style="gap:6px;margin-bottom:8px;flex-wrap:nowrap;">
+        <input id="twitchChannelInput" placeholder="Twitch channel name" style="flex:1;min-width:0;">
       </div>
-      <iframe 
-        id="twitchEmbedFrame"
-        class="stream-frame"
-        src=""
-        allowfullscreen>
-      </iframe>
-
-      <div class="api-box">
-        <label>Twitch Client ID (Helix API)</label>
-        <input id="twitchClientId" placeholder="Client ID">
-        <label>Twitch OAuth Token</label>
-        <input id="twitchToken" type="password" placeholder="Bearer Token">
-        <button id="saveTwitchApiBtn" class="secondary" style="margin-top:4px;">Enable Live Viewer Tracking</button>
+      <div class="row" style="gap:6px;margin-bottom:8px;">
+        <button id="twitchPlayerBtn" class="secondary" style="flex:1;">▶ Watch</button>
+        <button id="twitchChatBtn" class="secondary" style="flex:1;">💬 Chat</button>
       </div>
+      <div id="twitchInfo" class="upload-note"></div>
+      <details class="add-src">
+        <summary>Live viewer count (optional)</summary>
+        <label for="twitchClientId">Twitch Client ID</label>
+        <input id="twitchClientId" placeholder="Client ID" autocomplete="off">
+        <label for="twitchToken">Twitch OAuth token</label>
+        <input id="twitchToken" type="password" placeholder="Paste token (stored encrypted)" autocomplete="off">
+        <button id="saveTwitchApiBtn" class="secondary">Save &amp; start tracking</button>
+        <div class="upload-note">Get both from dev.twitch.tv. The token is encrypted with your OS keychain and never shown again.</div>
+      </details>
     </div>
   </div>
 </div>
 
-<div class="panel hidden" id="soundboardPanel">
-  <h2 style="font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;">
-    <span>🎛️ Soundboard</span>
-    <button class="secondary icon" id="sbStopAllBtn">⏹ Stop All</button>
-  </h2>
-  <div class="sb-tabs" id="sbTabs"></div>
-  <div class="sb-grid" id="sbGrid"></div>
-  <div class="upload-note" style="margin-top:10px;">Plays through a hidden browser source in whatever scene is currently live (Go Live on a scene first). Up to <span id="sbPoolSizeNote"></span> sounds can overlap at once — beyond that, the oldest overlapping sound is cut off to make room. Sounds and buttons are saved per profile.</div>
-
-  <div class="prop-section" style="margin-top:14px;">
-    <div class="prop-section-title" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="sbLibraryToggle">
-      <span>Sound Library (reusable sources) <span id="sbLibraryCount" style="color:var(--muted);font-weight:normal;"></span></span>
-      <span id="sbLibraryCaret">▸</span>
+<div class="bottom-grid">
+  <section class="panel" id="soundboardPanel">
+    <div class="panel-head">
+      <h2>🎛️ Soundboard</h2>
+      <div class="ph-tools"><button class="secondary icon" id="sbStopAllBtn">⏹ Stop All</button></div>
     </div>
-    <div id="sbLibraryList" class="scroll-list hidden" style="max-height:220px;"></div>
-  </div>
+    <div class="sb-tabs" id="sbTabs"></div>
+    <div class="sb-grid" id="sbGrid"></div>
+    <div class="upload-note" style="margin-top:10px;">Plays through hidden browser sources in whichever scene is live. Up to <span id="sbPoolSizeNote"></span> sounds overlap at once. Drag tiles to reorder • double-click a board tab to rename • click a looping sound again to stop it.</div>
+
+    <div class="prop-section" style="margin-top:14px;">
+      <div class="prop-section-title collapsible" id="sbLibraryToggle">
+        <span>Sound Library <span id="sbLibraryCount" class="muted"></span></span>
+        <span id="sbLibraryCaret">▸</span>
+      </div>
+      <div id="sbLibraryList" class="scroll-list hidden" style="max-height:220px;"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="macrosPanel">
+    <div class="panel-head">
+      <h2>⚡ Macros</h2>
+    </div>
+    <div class="sb-grid" id="macroGrid"></div>
+    <div class="upload-note" style="margin-top:10px;">A macro runs several actions in a row — switch scene, show/hide sources, mute, play a sound, start recording, wait, and more.</div>
+  </section>
 </div>
 
-<div class="panel">
-  <h2 style="font-size:13px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;">
-    <span>📜 Activity Log</span>
-    <button class="secondary icon" id="clearLogBtn">Clear</button>
-  </h2>
+<section class="panel">
+  <div class="panel-head">
+    <h2>📜 Activity Log</h2>
+    <div class="ph-tools"><button class="secondary icon" id="clearLogBtn">Clear</button></div>
+  </div>
   <div id="activityLogList" class="scroll-list" style="max-height:180px;"><div class="empty-note">Nothing yet.</div></div>
-</div>
+</section>
 
-<div class="hidden" id="sbModalBackdrop"></div>
-<div class="hidden" id="sbButtonModal">
+<!-- Soundboard button editor -->
+<div class="hidden backdrop" id="sbModalBackdrop"></div>
+<div class="hidden modal" id="sbButtonModal" role="dialog" aria-modal="true">
   <h3 id="sbModalTitle">New Button</h3>
   <div class="prop-row">
-    <label>Name</label>
-    <input type="text" id="sbFieldName" placeholder="Airhorn">
+    <label for="sbFieldName">Name</label>
+    <input type="text" id="sbFieldName" placeholder="Airhorn" maxlength="40">
   </div>
-  <div class="row" style="gap:10px;">
-    <div style="flex:1;"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Icon (emoji)</label><input type="text" id="sbFieldIcon" placeholder="🔊" maxlength="4" style="width:100%;"></div>
-    <div style="flex:1;"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Color</label><input type="color" id="sbFieldColor" value="#7c5cff" style="width:100%;height:34px;padding:2px;"></div>
+  <div class="row" style="gap:10px;flex-wrap:nowrap;">
+    <div style="flex:1;"><label for="sbFieldIcon">Icon (emoji)</label><input type="text" id="sbFieldIcon" placeholder="🔊" maxlength="4" style="width:100%;"></div>
+    <div style="flex:1;"><label for="sbFieldColor">Color</label><input type="color" id="sbFieldColor" value="#7c5cff" style="width:100%;height:34px;padding:2px;"></div>
   </div>
 
   <div class="prop-section">
@@ -550,24 +365,25 @@ body{padding:24px 28px 84px;}
     </div>
     <div id="sbModeUrl" class="prop-row hidden">
       <input type="text" id="sbFieldUrl" placeholder="https://.../sound.mp3" style="width:100%;">
-      <div class="upload-note" style="margin-top:4px;">Must be a direct link to a playable audio file, not a webpage. Reusing a URL you've already added will reuse that same library source.</div>
+      <div class="upload-note" style="margin-top:4px;">Must be a direct link to an audio file, not a webpage.</div>
     </div>
+    <button type="button" class="secondary" id="sbPreviewBtn" style="width:100%;">🎧 Preview on this PC</button>
   </div>
 
   <div class="prop-section">
     <div class="prop-section-title">Playback</div>
     <div class="prop-row">
-      <label>Volume <span id="sbVolLabel">100%</span></label>
+      <label for="sbFieldVolume">Volume <span id="sbVolLabel">100%</span></label>
       <input type="range" id="sbFieldVolume" min="0" max="100" value="100">
     </div>
-    <div class="checkbox-row" style="margin-bottom:8px;"><input type="checkbox" id="sbFieldLoop"><label for="sbFieldLoop">Loop</label></div>
-    <div class="checkbox-row" style="margin-bottom:8px;"><input type="checkbox" id="sbFieldOneInstance"><label for="sbFieldOneInstance">Restart instead of stacking if already playing</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="sbFieldLoop"><label for="sbFieldLoop">Loop</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="sbFieldOneInstance"><label for="sbFieldOneInstance">Restart instead of stacking if already playing</label></div>
     <div class="prop-row">
       <label>Hotkey</label>
-      <div class="row" style="gap:8px;">
-        <input type="text" id="sbFieldHotkey" placeholder="None" readonly style="flex:1;">
+      <div class="row" style="gap:8px;flex-wrap:nowrap;">
+        <input type="text" id="sbFieldHotkey" placeholder="None" readonly style="flex:1;min-width:0;">
         <button type="button" class="secondary" id="sbRecordHotkeyBtn">Set</button>
-        <button type="button" class="secondary icon" id="sbClearHotkeyBtn">✕</button>
+        <button type="button" class="secondary icon" id="sbClearHotkeyBtn" title="Clear hotkey">✕</button>
       </div>
     </div>
   </div>
@@ -582,54 +398,102 @@ body{padding:24px 28px 84px;}
   </div>
 </div>
 
-<div class="hidden" id="previewPanel">
+<!-- Macro editor -->
+<div class="hidden backdrop" id="macroModalBackdrop"></div>
+<div class="hidden modal wide" id="macroModal" role="dialog" aria-modal="true">
+  <h3 id="macroModalTitle">New Macro</h3>
+  <div class="row" style="gap:10px;flex-wrap:nowrap;">
+    <div style="flex:3;"><label for="mcFieldName">Name</label><input type="text" id="mcFieldName" placeholder="Start show" maxlength="40" style="width:100%;"></div>
+    <div style="flex:1;"><label for="mcFieldIcon">Icon</label><input type="text" id="mcFieldIcon" placeholder="⚡" maxlength="4" style="width:100%;"></div>
+    <div style="flex:1;"><label for="mcFieldColor">Color</label><input type="color" id="mcFieldColor" value="#e0b23f" style="width:100%;height:34px;padding:2px;"></div>
+  </div>
+  <div class="prop-row" style="margin-top:10px;">
+    <label>Hotkey</label>
+    <div class="row" style="gap:8px;flex-wrap:nowrap;">
+      <input type="text" id="mcFieldHotkey" placeholder="None" readonly style="flex:1;min-width:0;">
+      <button type="button" class="secondary" id="mcRecordHotkeyBtn">Set</button>
+      <button type="button" class="secondary icon" id="mcClearHotkeyBtn" title="Clear hotkey">✕</button>
+    </div>
+  </div>
+  <div class="prop-section">
+    <div class="prop-section-title">Steps (run top to bottom)</div>
+    <div id="mcSteps"></div>
+    <button type="button" class="secondary" id="mcAddStepBtn" style="width:100%;margin-top:6px;">＋ Add step</button>
+  </div>
+  <datalist id="dlScenes"></datalist>
+  <datalist id="dlSources"></datalist>
+  <datalist id="dlInputs"></datalist>
+  <div id="mcModalErr" class="err-box hidden"></div>
+  <div class="modal-actions" style="justify-content:space-between;">
+    <div style="display:flex;gap:8px;">
+      <button class="secondary danger" id="mcDeleteBtn" style="display:none;">Delete</button>
+      <button class="secondary" id="mcTestBtn">▶ Test run</button>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="secondary" id="mcModalCancel">Cancel</button>
+      <button id="mcModalSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="hidden floating" id="previewPanel">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
     <strong id="previewTitle" style="font-size:13px;"></strong>
     <button class="secondary icon" id="previewClose">✕</button>
   </div>
-  <img id="previewImg" style="max-width:360px;max-height:280px;display:block;border-radius:6px;background:#000;width:100%;">
-  <div class="upload-note" style="margin-top:6px;">This is what this one source is rendering right now, on its own — separate from what's stacked on top of it in the scene.</div>
+  <img id="previewImg" alt="" style="display:block;border-radius:6px;background:#000;width:100%;">
+  <div class="upload-note" style="margin-top:6px;">What this one source is rendering right now, on its own.</div>
 </div>
 
-<div class="hidden" id="propsPanel">
+<div class="hidden floating" id="propsPanel">
   <h3 id="propsTitle">Properties</h3>
   <div class="kind" id="propsKind"></div>
-  
+
   <div id="mediaSection" class="prop-section hidden">
-    <div class="prop-section-title">Camera / Playback Controls</div>
+    <div class="prop-section-title">Playback Controls</div>
     <div class="media-controls">
       <button id="mediaPlayBtn">▶ Play</button>
       <button id="mediaPauseBtn" class="secondary">⏸ Pause</button>
       <button id="mediaRestartBtn" class="secondary">🔄 Restart</button>
     </div>
     <div class="prop-row" style="margin-top:8px;">
-      <label>Scrub / Position</label>
-      <input type="range" id="mediaScrubber" min="0" max="100" value="0">
+      <label for="mediaScrubber">Position <span id="mediaPosLabel"></span></label>
+      <input type="range" id="mediaScrubber" min="0" max="1000" value="0">
     </div>
   </div>
 
   <div class="prop-section">
-    <div class="prop-section-title">Transform & Size Settings</div>
+    <div class="prop-section-title">Transform</div>
     <div class="size-mode-toggle">
       <button id="modePctBtn" class="active">Percentage (%)</button>
       <button id="modeRatioBtn">Ratio (Scale)</button>
     </div>
-    <div class="row">
-      <div style="flex:1;"><label id="labelScaleX">Scale X (%)</label><input type="number" id="propScaleX" step="any"></div>
-      <div style="flex:1;"><label id="labelScaleY">Scale Y (%)</label><input type="number" id="propScaleY" step="any"></div>
+    <div class="row" style="flex-wrap:nowrap;">
+      <div style="flex:1;min-width:0;"><label id="labelScaleX" for="propScaleX">Scale X (%)</label><input type="number" id="propScaleX" step="any" style="width:100%;"></div>
+      <div style="flex:1;min-width:0;"><label id="labelScaleY" for="propScaleY">Scale Y (%)</label><input type="number" id="propScaleY" step="any" style="width:100%;"></div>
     </div>
     <div class="prop-row" style="margin-top:10px;">
-      <label>Position (canvas px)</label>
-      <div class="row" style="gap:8px;">
-        <input type="number" id="propPosX" step="any" placeholder="X" style="flex:1;">
-        <input type="number" id="propPosY" step="any" placeholder="Y" style="flex:1;">
+      <label>Position (canvas px) &amp; rotation (°)</label>
+      <div class="row" style="gap:8px;flex-wrap:nowrap;">
+        <input type="number" id="propPosX" step="any" placeholder="X" style="flex:1;min-width:0;">
+        <input type="number" id="propPosY" step="any" placeholder="Y" style="flex:1;min-width:0;">
+        <input type="number" id="propRot" step="any" placeholder="°" style="flex:1;min-width:0;">
       </div>
     </div>
-    <button class="secondary" id="fitScreenBtn" style="width:100%;margin-top:4px;">🖥 Fit to Screen</button>
+    <div class="row" style="gap:6px;flex-wrap:nowrap;">
+      <button class="secondary" id="fitScreenBtn" style="flex:1;">🖥 Fit</button>
+      <button class="secondary" id="centerBtn" style="flex:1;">⊕ Center</button>
+      <button class="secondary" id="resetTransformBtn" style="flex:1;">↺ Reset</button>
+    </div>
+  </div>
+
+  <div id="filtersSection" class="prop-section hidden">
+    <div class="prop-section-title">Filters</div>
+    <div id="filtersList"></div>
   </div>
 
   <div class="prop-section">
-    <div class="prop-section-title">Source Fields</div>
+    <div class="prop-section-title">Source Settings</div>
     <div id="propsForm"></div>
   </div>
 
@@ -642,2019 +506,18 @@ body{padding:24px 28px 84px;}
 
 </div><!-- /#appRoot -->
 
-<script>
-let ws=null, rpcVersion=1, identified=false, pending={};
-let baseW=1920, baseH=1080, scaleFactor=1, zoomLevel=1;
-let scenesData=[], currentProgramScene=null, editingScene=null;
-let stageItems=[], itemElMap={}, sourceRowElMap={};
-let isDragging=false;
-let audioInputs=[];
-let selectedItemId=null;
-let propsInputName=null, propsFields=null, propsOriginal=null, propsCurrentItem=null;
-let sizeMode = 'percent';
-let viewerInterval = null;
-let currentProfileId = null;
-let appStorageCache = {};
-let plConnections = [];
-let plEditingProfileId = null;
-let plSelectedAvatar = '🎬';
-let sceneHotkeyRecordingFor = null;
-let paletteItems = [];
-let paletteActiveIndex = 0;
-
-const vizSources = new Set();
-const vizHistory = new Map();
-const vizColorOverrides = new Map();
-const VIZ_MAX_POINTS = 200;
-const VIZ_COLORS = ['#7c5cff','#3fbf6f','#e0b23f','#ff5c5c','#3fa7bf','#e05cff','#bfa03f','#5c7cff'];
-let vizDrawQueued = false;
-let vizStyle = 'line';
-function vizColorFor(name){
-  if(vizColorOverrides.has(name)) return vizColorOverrides.get(name);
-  let hash=0; for(let i=0;i<name.length;i++) hash=(hash*31+name.charCodeAt(i))>>>0;
-  return VIZ_COLORS[hash % VIZ_COLORS.length];
-}
-function setVizColor(name,color){
-  vizColorOverrides.set(name,color);
-  appStorageSet('vizColors', Object.fromEntries(vizColorOverrides));
-  requestVizDraw();
-}
-function requestVizDraw(){
-  if(vizDrawQueued) return;
-  vizDrawQueued=true;
-  requestAnimationFrame(()=>{ vizDrawQueued=false; drawViz(); });
-}
-function drawViz(){
-  const canvas=$('audioVizCanvas');
-  if(!canvas) return;
-  const ctx=canvas.getContext('2d');
-  const w=canvas.width, h=canvas.height;
-  ctx.clearRect(0,0,w,h);
-  const names=[...vizSources];
-  if(!names.length){
-    ctx.fillStyle='#666'; ctx.font='12px sans-serif';
-    ctx.fillText('Enable 📊 on a source in the Audio Mixer to graph it here.', 10, h/2);
-    return;
-  }
-  const bandH=h/names.length;
-  const barSlot=w/VIZ_MAX_POINTS;
-  names.forEach((name,idx)=>{
-    const hist=vizHistory.get(name)||[];
-    const color=vizColorFor(name);
-    const top=idx*bandH;
-    const pad=Math.min(4,bandH*0.08);
-    const plotTop=top+pad, plotH=bandH-pad*2, plotBottom=plotTop+plotH;
-    const yFor=lvl=>plotBottom-Math.min(1,lvl)*plotH;
-
-    if(idx>0){
-      ctx.strokeStyle='#2e2f34'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(0,top); ctx.lineTo(w,top); ctx.stroke();
-    }
-    ctx.fillStyle='#666'; ctx.font='10px sans-serif';
-    ctx.fillText(name, 6, top+12);
-
-    if(!hist.length) return;
-    if(vizStyle==='bars'){
-      ctx.fillStyle=color+'aa';
-      hist.forEach((lvl,i)=>{
-        const x=(i/(VIZ_MAX_POINTS-1))*w;
-        const y=yFor(lvl);
-        ctx.fillRect(x, y, Math.max(1,barSlot-1), plotBottom-y);
-      });
-    } else if(vizStyle==='dots'){
-      ctx.fillStyle=color;
-      hist.forEach((lvl,i)=>{
-        const x=(i/(VIZ_MAX_POINTS-1))*w;
-        const y=yFor(lvl);
-        ctx.beginPath(); ctx.arc(x,y,2,0,Math.PI*2); ctx.fill();
-      });
-    } else if(vizStyle==='area'){
-      ctx.strokeStyle=color; ctx.fillStyle=color+'55'; ctx.lineWidth=1.5;
-      ctx.beginPath();
-      hist.forEach((lvl,i)=>{
-        const x=(i/(VIZ_MAX_POINTS-1))*w;
-        const y=yFor(lvl);
-        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-      });
-      ctx.lineTo(w,plotBottom); ctx.lineTo(0,plotBottom); ctx.closePath();
-      ctx.fill(); ctx.stroke();
-    } else {
-      ctx.strokeStyle=color; ctx.lineWidth=2;
-      ctx.beginPath();
-      hist.forEach((lvl,i)=>{
-        const x=(i/(VIZ_MAX_POINTS-1))*w;
-        const y=yFor(lvl);
-        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-      });
-      ctx.stroke();
-    }
-  });
-}
-function renderVizLegend(){
-  const legend=$('audioVizLegend');
-  legend.innerHTML='';
-  if(!vizSources.size){ legend.innerHTML='<span>No sources selected.</span>'; return; }
-  vizSources.forEach(name=>{
-    const span=document.createElement('span');
-    span.style.display='inline-flex'; span.style.alignItems='center'; span.style.gap='5px';
-    const swatch=document.createElement('input');
-    swatch.type='color';
-    swatch.value=vizColorFor(name);
-    swatch.title='Change this line\'s color';
-    swatch.style.cssText='width:16px;height:16px;padding:0;border:none;background:none;cursor:pointer;';
-    swatch.addEventListener('input',()=>setVizColor(name, swatch.value));
-    const label=document.createElement('span');
-    label.textContent=name;
-    span.appendChild(swatch);
-    span.appendChild(label);
-    legend.appendChild(span);
-  });
-}
-
-const $=id=>document.getElementById(id);
-const statusDot=$('statusDot'), statusText=$('statusText'), errBox=$('errBox');
-
-function setStatus(t,k){statusText.textContent=t;statusDot.className='dot'+(k?' '+k:'');}
-function showErr(m){errBox.textContent=m;errBox.classList.remove('hidden');}
-function clearErr(){errBox.classList.add('hidden');}
-
-async function sha256b64(str){
-  const enc=new TextEncoder().encode(str);
-  const hash=await crypto.subtle.digest('SHA-256',enc);
-  let bin=''; new Uint8Array(hash).forEach(b=>bin+=String.fromCharCode(b));
-  return btoa(bin);
-}
-
-$('connectBtn').addEventListener('click', connect);
-
-function connect(){
-  clearErr();
-  const host=$('host').value.trim();
-  const port=$('port').value.trim()||'4455';
-  if(!host){ showErr('Enter the host\'s Tailscale IP.'); return; }
-  identified=false;
-  setStatus('Connecting…','pending');
-  $('connectBtn').disabled=true;
-
-  try{ ws=new WebSocket(`ws://${host}:${port}`); }
-  catch(e){ setStatus('Connection failed','err'); $('connectBtn').disabled=false; showErr('Could not open the socket: '+e.message); return; }
-
-  ws.onopen=()=>setStatus('Socket open, waiting for handshake…','pending');
-
-  ws.onmessage=async(evt)=>{
-    let msg; try{ msg=JSON.parse(evt.data); }catch(e){ return; }
-    if(msg.op===0){
-      rpcVersion=msg.d.rpcVersion;
-      const identifyMsg={op:1,d:{rpcVersion,eventSubscriptions: (1 << 16)}};
-      if(msg.d.authentication){
-        const pass=$('pass').value;
-        const secret=await sha256b64(pass+msg.d.authentication.salt);
-        identifyMsg.d.authentication=await sha256b64(secret+msg.d.authentication.challenge);
-      }
-      ws.send(JSON.stringify(identifyMsg));
-    } else if(msg.op===2){
-      identified=true;
-      setStatus('Connected','ok');
-      $('connectBtn').disabled=false;
-      $('scenesPanel').classList.remove('hidden');
-      $('mainArea').classList.remove('hidden');
-      $('soundboardPanel').classList.remove('hidden');
-      $('viewerWrap').classList.remove('hidden');
-      notify('Connected to OBS','ok');
-      logActivity('Connected to OBS');
-      loadEverything();
-    } else if(msg.op===5 && msg.d.eventType === 'InputVolumeMeters'){
-      msg.d.eventData.inputs.forEach(input => {
-        const meterEl = document.getElementById(`meter-${cssSafe(input.inputName)}`);
-        let levelMul = 0;
-        if (input.inputLevelsMul && input.inputLevelsMul.length) {
-          levelMul = Math.max(...input.inputLevelsMul.map(ch => ch[0] || 0));
-        }
-        if (meterEl) {
-          const pct = Math.min(100, Math.max(0, levelMul * 100));
-          meterEl.style.width = pct + '%';
-        }
-        if (vizSources.has(input.inputName)) {
-          const hist = vizHistory.get(input.inputName) || [];
-          hist.push(levelMul);
-          if (hist.length > VIZ_MAX_POINTS) hist.shift();
-          vizHistory.set(input.inputName, hist);
-        }
-      });
-      if (vizSources.size) requestVizDraw();
-    } else if(msg.op===7){
-      const cb=pending[msg.d.requestId];
-      delete pending[msg.d.requestId];
-      if(cb) cb(msg.d);
-    }
-  };
-
-  ws.onerror=()=>{
-    if(!identified){
-      setStatus('Connection failed','err');
-      $('connectBtn').disabled=false;
-      showErr("Couldn't reach that OBS instance.");
-      notify("Couldn't reach that OBS instance","err");
-    }
-  };
-  ws.onclose=()=>{
-    if(identified){
-      setStatus('Disconnected','err'); $('connectBtn').disabled=false;
-      notify('OBS disconnected','err');
-      logActivity('OBS disconnected');
-    }
-    identified=false;
-    stopStageBgLoop();
-    stopViewerPolling();
-  };
-}
-
-function sendRequest(requestType, requestData={}){
-  return new Promise((resolve)=>{
-    const requestId=requestType+'_'+Math.random().toString(36).slice(2);
-    pending[requestId]=(d)=>resolve(d);
-    ws.send(JSON.stringify({op:6,d:{requestType,requestId,requestData}}));
-  });
-}
-
-async function req(type, data={}){
-  const d=await sendRequest(type,data);
-  if(!d.requestStatus || !d.requestStatus.result) return null;
-  return d.responseData || {};
-}
-
-// Fetch real live viewer counts directly from Twitch Helix API
-async function fetchTwitchViewers() {
-  const username = $('twitchChannelInput').value.trim();
-  const clientId = $('twitchClientId').value.trim();
-  let token = $('twitchToken').value.trim();
-
-  if (!username || !clientId || !token) return;
-  if (token.startsWith('oauth:')) token = token.replace('oauth:', '');
-
-  try {
-    const res = await fetch(`https://api.twitch.tv/helix/streams?user_login=${username}`, {
-      headers: {
-        'Client-ID': clientId,
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!res.ok) {
-      $('viewerCount').textContent = 'API Error';
-      return;
-    }
-
-    const data = await res.json();
-    if (data.data && data.data.length > 0) {
-      const count = data.data[0].viewer_count;
-      $('viewerCount').textContent = count.toLocaleString();
-    } else {
-      $('viewerCount').textContent = 'Offline';
-    }
-  } catch (err) {
-    $('viewerCount').textContent = 'Err';
-  }
-}
-
-function startViewerPolling() {
-  stopViewerPolling();
-  fetchTwitchViewers();
-  viewerInterval = setInterval(fetchTwitchViewers, 10000);
-}
-
-function stopViewerPolling() {
-  if (viewerInterval) clearInterval(viewerInterval);
-}
-
-$('saveTwitchApiBtn').addEventListener('click', () => {
-  startViewerPolling();
-});
-
-$('loadStreamBtn').addEventListener('click', () => {
-  const channel = $('twitchChannelInput').value.trim();
-  if (!channel) return;
-  const parentHost = window.location.hostname || 'localhost';
-  $('twitchEmbedFrame').src = `https://player.twitch.tv/?channel=${channel}&parent=${parentHost}&muted=false`;
-  startViewerPolling();
-});
-
-async function loadEverything(){
-  const vs=await req('GetVideoSettings');
-  if(vs){ baseW=vs.baseWidth; baseH=vs.baseHeight; }
-  const sl=await req('GetSceneList');
-  if(sl){
-    scenesData=sl.scenes.slice().reverse();
-    currentProgramScene=sl.currentProgramSceneName;
-    renderSceneTabs();
-    await loadScene(currentProgramScene);
-  }
-  loadAudioInputs();
-}
-
-async function goLive(sceneName){
-  await req('SetCurrentProgramScene',{sceneName});
-  currentProgramScene=sceneName;
-  renderSceneTabs();
-  notify('Scene changed to '+sceneName,'ok');
-  logActivity('Switched to '+sceneName);
-}
-
-function renderSceneTabs(){
-  const strip=$('sceneStrip');
-  strip.innerHTML='';
-  const sceneHotkeys=appStorageGet('sceneHotkeys', {});
-  scenesData.forEach(s=>{
-    const tab=document.createElement('div');
-    tab.className='scene-tab'+(s.sceneName===editingScene?' active':'');
-    const hk=sceneHotkeys[s.sceneName];
-    tab.innerHTML=`
-      <img class="thumb" id="thumb-${cssSafe(s.sceneName)}">
-      <div class="name">${escapeHtml(s.sceneName)}</div>
-      ${s.sceneName===currentProgramScene?'<div class="live-dot"></div>':''}
-      ${hk?`<span class="sb-hotkey" style="position:static;display:inline-block;margin:2px 0;">${escapeHtml(hk)}</span>`:''}
-      <button class="secondary" data-role="hotkey" title="Set a hotkey to Go Live on this scene" style="font-size:10px;padding:3px 6px;">⌨</button>
-      <button class="secondary go-live">Go live</button>
-    `;
-    tab.querySelector('.name').addEventListener('click',()=>loadScene(s.sceneName));
-    tab.querySelector('.thumb').addEventListener('click',()=>loadScene(s.sceneName));
-    tab.querySelector('.go-live').addEventListener('click',async(e)=>{
-      e.stopPropagation();
-      await goLive(s.sceneName);
-    });
-    tab.querySelector('[data-role=hotkey]').addEventListener('click',(e)=>{
-      e.stopPropagation();
-      sceneHotkeyRecordingFor=s.sceneName;
-      e.currentTarget.textContent='Press a key…';
-    });
-    strip.appendChild(tab);
-    refreshSceneThumb(s.sceneName);
-  });
-}
-
-function setSceneHotkey(sceneName, combo){
-  const clashBtn=Object.values(sbState.buttons).find(b=>b.hotkey===combo);
-  const sceneHotkeys=appStorageGet('sceneHotkeys', {});
-  const clashScene=Object.keys(sceneHotkeys).find(k=>sceneHotkeys[k]===combo && k!==sceneName);
-  if(clashBtn){ notify(`"${combo}" is already used by soundboard button "${clashBtn.name}"`,'err'); renderSceneTabs(); return; }
-  if(clashScene){ notify(`"${combo}" is already used by scene "${clashScene}"`,'err'); renderSceneTabs(); return; }
-  sceneHotkeys[sceneName]=combo;
-  appStorageSet('sceneHotkeys', sceneHotkeys);
-  renderSceneTabs();
-}
-
-async function refreshSceneThumb(sceneName){
-  const data=await req('GetSourceScreenshot',{sourceName:sceneName,imageFormat:'jpg',imageWidth:280});
-  const img=$('thumb-'+cssSafe(sceneName));
-  if(data && img) img.src=data.imageData;
-}
-
-$('refreshSceneBtn').addEventListener('click',()=>editingScene && loadScene(editingScene));
-
-async function loadScene(sceneName){
-  stopStageBgLoop();
-  editingScene=sceneName;
-  renderSceneTabs();
-  const items=await req('GetSceneItemList',{sceneName});
-  stageItems=(items&&items.sceneItems)||[];
-  renderStage();
-  renderSourceList();
-  restartStageBgLoop();
-}
-
-function renderStage(recalcSize){
-  if(recalcSize!==false){
-    const wrapEl=document.querySelector('.stage-wrap');
-    const fitW=wrapEl?wrapEl.clientWidth-4:800;
-    scaleFactor=(fitW/baseW)*zoomLevel;
-  }
-  const stage=$('stage');
-  stage.style.width=(baseW*scaleFactor)+'px';
-  stage.style.height=(baseH*scaleFactor)+'px';
-  stage.innerHTML='';
-  itemElMap={};
-  $('zoomLabel').textContent=Math.round(zoomLevel*100)+'%';
-
-  stageItems.forEach(item=>{
-    const t=item.sceneItemTransform;
-    const div=document.createElement('div');
-    const isSelected=item.sceneItemId===selectedItemId;
-    const isText=(item.inputKind||'').startsWith('text_');
-    div.className='item'+(isText?' text':'')+(item.sceneItemLocked?' locked':'')+(item.sceneItemEnabled===false?' hidden-src':'')+(isSelected?' selected':'');
-    div.style.left=(t.positionX*scaleFactor)+'px';
-    div.style.top=(t.positionY*scaleFactor)+'px';
-    div.style.width=Math.max(t.width*scaleFactor,4)+'px';
-    div.style.height=Math.max(t.height*scaleFactor,4)+'px';
-    
-    const tag=document.createElement('div');
-    tag.className='tag'; tag.textContent=item.sourceName;
-    div.appendChild(tag);
-
-    if(isSelected && !item.sceneItemLocked){
-      const handles=['nw','n','ne','e','se','s','sw','w'];
-      handles.forEach(h=>{
-        const hEl=document.createElement('div');
-        hEl.className=`handle ${h}`;
-        hEl.addEventListener('pointerdown',(e)=>{ e.stopPropagation(); startScale(e,item,t,h); });
-        div.appendChild(hEl);
-      });
-    }
-
-    stage.appendChild(div);
-    itemElMap[item.sceneItemId]=div;
-    if(!item.sceneItemLocked) div.addEventListener('pointerdown',(e)=>startDrag(e,div,item,t));
-  });
-}
-
-$('zoomInBtn').addEventListener('click',()=>{ zoomLevel=Math.min(zoomLevel*1.25,4); renderStage(); });
-$('zoomOutBtn').addEventListener('click',()=>{ zoomLevel=Math.max(zoomLevel/1.25,0.5); renderStage(); });
-$('zoomResetBtn').addEventListener('click',()=>{ zoomLevel=1; renderStage(); });
-$('syncPosBtn').addEventListener('click', refreshItemTransforms);
-$('vizStyleSelect').addEventListener('change', ()=>{ vizStyle=$('vizStyleSelect').value; requestVizDraw(); });
-
-function renderSourceList(){
-  const list=$('sourceList');
-  list.innerHTML='';
-  sourceRowElMap={};
-  if(!stageItems.length){ list.innerHTML='<div class="empty-note">No sources in this scene.</div>'; return; }
-  stageItems.forEach(item=>{
-    const row=document.createElement('div');
-    row.className='src-row';
-    row.innerHTML=`
-      <span class="src-name" title="${escapeHtml(item.sourceName)}">${escapeHtml(item.sourceName)}</span>
-      <button class="toggle-btn" data-role="preview" title="Preview this source alone">📷</button>
-      <button class="toggle-btn" data-role="props" title="Properties">⚙</button>
-      <button class="toggle-btn ${item.sceneItemEnabled===false?'off':''}" data-role="eye" title="Show/hide">👁</button>
-      <button class="toggle-btn ${item.sceneItemLocked?'':'off'}" data-role="lock" title="Lock/unlock">🔒</button>
-      <button class="toggle-btn danger" data-role="delete" title="Delete source">🗑</button>
-    `;
-    row.querySelector('.src-name').addEventListener('click',()=>{ selectItem(item.sceneItemId); flashItem(item.sceneItemId); });
-    row.querySelector('[data-role=preview]').addEventListener('click',(e)=>{ previewSource(item.sourceName, e.currentTarget.closest('.src-row')); });
-    row.querySelector('[data-role=props]').addEventListener('click',(e)=>{ selectItem(item.sceneItemId); openProperties(item, e.currentTarget.closest('.src-row')); });
-    row.querySelector('[data-role=eye]').addEventListener('click',async()=>{
-      const newVal=item.sceneItemEnabled===false?true:false;
-      await req('SetSceneItemEnabled',{sceneName:editingScene,sceneItemId:item.sceneItemId,sceneItemEnabled:newVal});
-      item.sceneItemEnabled=newVal;
-      renderStage(false); renderSourceList();
-      logActivity((newVal?'Showed ':'Hid ')+item.sourceName);
-    });
-    row.querySelector('[data-role=lock]').addEventListener('click',async()=>{
-      const newVal=!item.sceneItemLocked;
-      await req('SetSceneItemLocked',{sceneName:editingScene,sceneItemId:item.sceneItemId,sceneItemLocked:newVal});
-      item.sceneItemLocked=newVal;
-      renderStage(false); renderSourceList();
-    });
-    row.querySelector('[data-role=delete]').addEventListener('click',async()=>{
-      const ok=confirm(`Remove "${item.sourceName}" from this scene? This can't be undone.`);
-      if(!ok) return;
-      await req('RemoveSceneItem',{sceneName:editingScene,sceneItemId:item.sceneItemId});
-      if(selectedItemId===item.sceneItemId) selectedItemId=null;
-      await loadScene(editingScene);
-    });
-    list.appendChild(row);
-    sourceRowElMap[item.sceneItemId]=row;
-  });
-}
-
-function flashItem(id){
-  const el=itemElMap[id];
-  if(!el) return;
-  el.classList.add('flash');
-  el.scrollIntoView({behavior:'smooth',block:'nearest',inline:'nearest'});
-  setTimeout(()=>el.classList.remove('flash'),1200);
-}
-
-function flashSourceRow(id){
-  const el=sourceRowElMap[id];
-  if(!el) return;
-  el.classList.add('flash');
-  el.scrollIntoView({behavior:'smooth',block:'nearest'});
-  setTimeout(()=>el.classList.remove('flash'),1200);
-}
-
-let stageBgLoopActive=false;
-let stagePosInterval=null;
-async function refreshStageBg(){
-  if(!editingScene) return;
-  const data=await req('GetSourceScreenshot',{sourceName:editingScene,imageFormat:'jpg',imageWidth:640});
-  if(data) $('stage').style.backgroundImage=`url(${data.imageData})`;
-}
-
-async function refreshItemTransforms(){
-  if(!editingScene || isDragging) return;
-  const items=await req('GetSceneItemList',{sceneName:editingScene});
-  if(!items) return;
-  stageItems=items.sceneItems||[];
-  renderStage(false);
-  renderSourceList();
-}
-
-function restartStageBgLoop(){
-  stageBgLoopActive=true;
-  if(stagePosInterval) clearInterval(stagePosInterval);
-  stagePosInterval=setInterval(()=>{ if(!isDragging) refreshItemTransforms(); },1000);
-  (async function loop(){
-    while(stageBgLoopActive && editingScene){
-      const startTime = Date.now();
-      await refreshStageBg();
-      
-      const fpsVal = $('fpsSelect').value;
-      if (fpsVal !== 'max') {
-        const targetFps = parseInt(fpsVal, 10);
-        const frameTime = 1000 / targetFps;
-        const elapsed = Date.now() - startTime;
-        const delay = Math.max(0, frameTime - elapsed);
-        if (delay > 0) {
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-  })();
-}
-
-function stopStageBgLoop(){
-  stageBgLoopActive=false;
-  if(stagePosInterval){ clearInterval(stagePosInterval); stagePosInterval=null; }
-}
-
-function startDrag(e,el,item,transform){
-  e.preventDefault();
-  isDragging=true;
-  const stageRect=$('stage').getBoundingClientRect();
-  const offsetX=e.clientX-stageRect.left-(transform.positionX*scaleFactor);
-  const offsetY=e.clientY-stageRect.top-(transform.positionY*scaleFactor);
-  const startX=e.clientX, startY=e.clientY;
-  let rafQueued=false, moved=false;
-
-  const move=(ev)=>{
-    if(Math.abs(ev.clientX-startX)>3 || Math.abs(ev.clientY-startY)>3) moved=true;
-    const r2=$('stage').getBoundingClientRect();
-    const px=(ev.clientX-r2.left-offsetX)/scaleFactor;
-    const py=(ev.clientY-r2.top-offsetY)/scaleFactor;
-    el.style.left=(px*scaleFactor)+'px';
-    el.style.top=(py*scaleFactor)+'px';
-    if(!rafQueued){
-      rafQueued=true;
-      requestAnimationFrame(()=>{
-        rafQueued=false;
-        req('SetSceneItemTransform',{sceneName:editingScene,sceneItemId:item.sceneItemId,sceneItemTransform:{positionX:px,positionY:py}});
-      });
-    }
-  };
-  const up=(ev)=>{
-    isDragging=false;
-    el.releasePointerCapture(ev.pointerId);
-    window.removeEventListener('pointermove',move);
-    window.removeEventListener('pointerup',up);
-    if(moved){
-      const r2=$('stage').getBoundingClientRect();
-      const px=(ev.clientX-r2.left-offsetX)/scaleFactor;
-      const py=(ev.clientY-r2.top-offsetY)/scaleFactor;
-      transform.positionX=px; transform.positionY=py;
-      req('SetSceneItemTransform',{sceneName:editingScene,sceneItemId:item.sceneItemId,sceneItemTransform:{positionX:px,positionY:py}});
-    } else {
-      selectItem(item.sceneItemId);
-      flashSourceRow(item.sceneItemId);
-    }
-  };
-  el.setPointerCapture(e.pointerId);
-  window.addEventListener('pointermove',move);
-  window.addEventListener('pointerup',up);
-}
-
-function startScale(e, item, transform, handle){
-  e.preventDefault();
-  isDragging=true;
-  const startX = e.clientX, startY = e.clientY;
-  const startW = transform.width, startH = transform.height;
-  const startPosX = transform.positionX, startPosY = transform.positionY;
-  const scaleX = transform.scaleX || 1, scaleY = transform.scaleY || 1;
-  const aspectRatio = startW / (startH || 1);
-  let rafQueued = false;
-
-  const wFactor = handle.includes('e') ? 1 : (handle.includes('w') ? -1 : 0);
-  const hFactor = handle.includes('s') ? 1 : (handle.includes('n') ? -1 : 0);
-
-  const move = (ev) => {
-    const dx = (ev.clientX - startX) / scaleFactor;
-    const dy = (ev.clientY - startY) / scaleFactor;
-    const lockAspect = ev.shiftKey;
-    const fromCenter = ev.ctrlKey || ev.metaKey;
-
-    let newW = wFactor !== 0 ? Math.max(10, startW + wFactor * dx) : startW;
-    let newH = hFactor !== 0 ? Math.max(10, startH + hFactor * dy) : startH;
-
-    if (lockAspect) {
-      if (wFactor !== 0 && hFactor !== 0) {
-        // corner handle: drive off whichever axis moved more, proportionally
-        if (Math.abs(newW / startW - 1) >= Math.abs(newH / startH - 1)) newH = newW / aspectRatio;
-        else newW = newH * aspectRatio;
-      } else if (wFactor !== 0) {
-        newH = newW / aspectRatio;
-      } else if (hFactor !== 0) {
-        newW = newH * aspectRatio;
-      }
-    }
-
-    let newX = startPosX;
-    if (newW !== startW) {
-      if (fromCenter) newX = startPosX - (newW - startW) / 2;
-      else if (wFactor < 0) newX = startPosX + (startW - newW);
-      // wFactor >= 0 (including 0, from aspect-lock spillover): left edge stays anchored
-    }
-    let newY = startPosY;
-    if (newH !== startH) {
-      if (fromCenter) newY = startPosY - (newH - startH) / 2;
-      else if (hFactor < 0) newY = startPosY + (startH - newH);
-      // hFactor >= 0 (including 0, from aspect-lock spillover): top edge stays anchored
-    }
-
-    const newScaleX = scaleX * (newW / (startW || 1));
-    const newScaleY = scaleY * (newH / (startH || 1));
-
-    if (!rafQueued) {
-      rafQueued = true;
-      requestAnimationFrame(() => {
-        rafQueued = false;
-        req('SetSceneItemTransform', {
-          sceneName: editingScene,
-          sceneItemId: item.sceneItemId,
-          sceneItemTransform: { positionX: newX, positionY: newY, scaleX: newScaleX, scaleY: newScaleY }
-        });
-      });
-    }
-  };
-
-  const up = () => {
-    isDragging=false;
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
-    loadScene(editingScene);
-  };
-
-  window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', up);
-}
-
-function selectItem(id){
-  selectedItemId=id;
-  renderStage(false);
-}
-
-window.addEventListener('keydown',(e)=>{
-  if(!selectedItemId) return;
-  const tag=(document.activeElement && document.activeElement.tagName || '').toLowerCase();
-  if(tag==='input' || tag==='textarea' || tag==='select') return;
-  const map={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
-  if(!map[e.key]) return;
-  e.preventDefault();
-  const item=stageItems.find(i=>i.sceneItemId===selectedItemId);
-  if(!item || item.sceneItemLocked) return;
-  const step=e.shiftKey?20:2;
-  const [dx,dy]=map[e.key];
-  const t=item.sceneItemTransform;
-  t.positionX+=dx*step; t.positionY+=dy*step;
-  const el=itemElMap[selectedItemId];
-  if(el){ el.style.left=(t.positionX*scaleFactor)+'px'; el.style.top=(t.positionY*scaleFactor)+'px'; }
-  req('SetSceneItemTransform',{sceneName:editingScene,sceneItemId:selectedItemId,sceneItemTransform:{positionX:t.positionX,positionY:t.positionY}});
-});
-
-async function previewSource(name, anchorEl){
-  $('previewTitle').textContent = name;
-  $('previewImg').removeAttribute('src');
-  const panel = $('previewPanel');
-  panel.classList.remove('hidden');
-  positionPreview(anchorEl);
-  const data = await req('GetSourceScreenshot',{ sourceName: name, imageFormat: 'jpg', imageWidth: 480 });
-  if(data) $('previewImg').src = data.imageData;
-}
-function positionPreview(anchorEl){
-  const panel = $('previewPanel');
-  const rect = anchorEl ? anchorEl.getBoundingClientRect() : {top:80,left:window.innerWidth-340};
-  let left = rect.left - panel.offsetWidth - 12;
-  if(left < 8) left = Math.min(rect.right + 12, window.innerWidth - panel.offsetWidth - 8);
-  panel.style.left = Math.max(8, left) + 'px';
-  panel.style.top = rect.top + 'px';
-}
-$('previewClose').addEventListener('click', () => $('previewPanel').classList.add('hidden'));
-
-function closeProps(){ $('propsPanel').classList.add('hidden'); document.removeEventListener('mousedown', onOutsideClick, true); }
-function onOutsideClick(e){ if(!$('propsPanel').contains(e.target)) closeProps(); }
-
-async function openProperties(item, anchorEl){
-  propsCurrentItem = item;
-  propsInputName = item.sourceName;
-  $('propsTitle').textContent = item.sourceName;
-  $('propsKind').textContent = item.inputKind || '';
-  $('propsForm').innerHTML = '<div class="empty-note">Loading…</div>';
-  $('propsErr').classList.add('hidden');
-
-  updateScaleInputsUI();
-
-  const mediaSec = $('mediaSection');
-  const mediaState = await req('GetMediaInputStatus', { inputName: item.sourceName });
-  if (mediaState) {
-    mediaSec.classList.remove('hidden');
-    $('mediaScrubber').value = Math.round((mediaState.mediaCursor / (mediaState.mediaDuration || 1)) * 100);
-  } else {
-    mediaSec.classList.add('hidden');
-  }
-
-  const panel = $('propsPanel');
-  panel.classList.remove('hidden');
-  panel.style.left = '-9999px'; panel.style.top = '0px';
-
-  const data = await req('GetInputSettings', { inputName: item.sourceName });
-  if (!data) {
-    $('propsForm').innerHTML = '';
-    $('propsErr').textContent = "Couldn't load settings for this source type.";
-    $('propsErr').classList.remove('hidden');
-  } else {
-    propsOriginal = data.inputSettings || {};
-    renderPropsForm(propsOriginal);
-  }
-
-  positionProps(anchorEl);
-  document.addEventListener('mousedown', onOutsideClick, true);
-}
-
-function updateScaleInputsUI() {
-  if (!propsCurrentItem) return;
-  const t = propsCurrentItem.sceneItemTransform || {};
-  const sx = t.scaleX !== undefined ? t.scaleX : 1;
-  const sy = t.scaleY !== undefined ? t.scaleY : 1;
-
-  if (sizeMode === 'percent') {
-    $('labelScaleX').textContent = 'Scale X (%)';
-    $('labelScaleY').textContent = 'Scale Y (%)';
-    $('propScaleX').value = (sx * 100).toFixed(1);
-    $('propScaleY').value = (sy * 100).toFixed(1);
-  } else {
-    $('labelScaleX').textContent = 'Scale X (Ratio)';
-    $('labelScaleY').textContent = 'Scale Y (Ratio)';
-    $('propScaleX').value = sx.toFixed(3);
-    $('propScaleY').value = sy.toFixed(3);
-  }
-
-  $('propPosX').value = Math.round((t.positionX || 0) * 10) / 10;
-  $('propPosY').value = Math.round((t.positionY || 0) * 10) / 10;
-}
-
-$('modePctBtn').addEventListener('click', () => {
-  sizeMode = 'percent';
-  $('modePctBtn').classList.add('active');
-  $('modeRatioBtn').classList.remove('active');
-  updateScaleInputsUI();
-});
-
-$('modeRatioBtn').addEventListener('click', () => {
-  sizeMode = 'ratio';
-  $('modeRatioBtn').classList.add('active');
-  $('modePctBtn').classList.remove('active');
-  updateScaleInputsUI();
-});
-
-$('fitScreenBtn').addEventListener('click', async () => {
-  if (!propsCurrentItem || !editingScene) return;
-  $('fitScreenBtn').disabled = true;
-  await req('SetSceneItemTransform', {
-    sceneName: editingScene,
-    sceneItemId: propsCurrentItem.sceneItemId,
-    sceneItemTransform: {
-      boundsType: 'OBS_BOUNDS_SCALE_INNER',
-      boundsAlignment: 0,
-      boundsWidth: baseW,
-      boundsHeight: baseH,
-      positionX: 0,
-      positionY: 0
-    }
-  });
-  const items = await req('GetSceneItemList', { sceneName: editingScene });
-  if (items) {
-    stageItems = items.sceneItems || [];
-    propsCurrentItem = stageItems.find(i => i.sceneItemId === propsCurrentItem.sceneItemId) || propsCurrentItem;
-    renderStage(false);
-    renderSourceList();
-    updateScaleInputsUI();
-  }
-  $('fitScreenBtn').disabled = false;
-});
-
-$('mediaPlayBtn').addEventListener('click', () => req('TriggerMediaInputAction', { inputName: propsInputName, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY' }));
-$('mediaPauseBtn').addEventListener('click', () => req('TriggerMediaInputAction', { inputName: propsInputName, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE' }));
-$('mediaRestartBtn').addEventListener('click', () => req('TriggerMediaInputAction', { inputName: propsInputName, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART' }));
-$('mediaScrubber').addEventListener('input', async (e) => {
-  const status = await req('GetMediaInputStatus', { inputName: propsInputName });
-  if (status && status.mediaDuration) {
-    const targetPos = Math.round((e.target.value / 100) * status.mediaDuration);
-    req('SetMediaInputCursor', { inputName: propsInputName, mediaCursor: targetPos });
-  }
-});
-
-function positionProps(anchorEl){
-  const panel=$('propsPanel');
-  const rect=anchorEl ? anchorEl.getBoundingClientRect() : {top:80,left:window.innerWidth-320,right:window.innerWidth-8,bottom:80};
-  const pw=panel.offsetWidth, ph=panel.offsetHeight;
-  let left=rect.left-pw-12;
-  if(left<8) left=Math.min(rect.right+12, window.innerWidth-pw-8);
-  let top=rect.top;
-  if(top+ph>window.innerHeight-8) top=Math.max(8, window.innerHeight-ph-8);
-  panel.style.left=Math.max(8,left)+'px';
-  panel.style.top=top+'px';
-}
-
-function flattenSettings(obj, prefix){
-  let out={};
-  for(const [k,v] of Object.entries(obj)){
-    const key=prefix?prefix+'.'+k:k;
-    if(v===null || v===undefined) out[key]='';
-    else if(Array.isArray(v)) continue;
-    else if(typeof v==='object'){
-      if(!prefix) out={...out, ...flattenSettings(v,key)};
-    } else {
-      out[key]=v;
-    }
-  }
-  return out;
-}
-
-function setNestedValue(obj, dottedKey, value){
-  const parts=dottedKey.split('.');
-  let cur=obj;
-  for(let i=0;i<parts.length-1;i++){
-    if(typeof cur[parts[i]]!=='object' || cur[parts[i]]===null) cur[parts[i]]={};
-    cur=cur[parts[i]];
-  }
-  cur[parts[parts.length-1]]=value;
-}
-
-function renderPropsForm(settings){
-  const form=$('propsForm');
-  form.innerHTML='';
-  propsFields={};
-  const flat=flattenSettings(settings,'');
-  const entries=Object.entries(flat);
-  if(!entries.length){
-    form.innerHTML='<div class="empty-note">No additional settings available.</div>';
-    return;
-  }
-  entries.forEach(([key,val])=>{
-    const row=document.createElement('div');
-    row.className='prop-row';
-    const type=typeof val;
-    const fieldId='pf_'+cssSafe(key);
-    let inputHtml;
-    if(type==='boolean'){
-      inputHtml=`<input type="checkbox" id="${fieldId}" ${val?'checked':''}>`;
-    } else if(type==='number'){
-      inputHtml=`<input type="number" id="${fieldId}" value="${val}">`;
-    } else {
-      inputHtml=`<input type="text" id="${fieldId}" value="${escapeHtml(String(val))}">`;
-    }
-    row.innerHTML=`<label>${escapeHtml(key)}</label>${inputHtml}`;
-    form.appendChild(row);
-    propsFields[key]={type,fieldId};
-  });
-}
-
-$('propsCancel').addEventListener('click', closeProps);
-$('propsPanel').addEventListener('mousedown',(e)=>e.stopPropagation());
-window.addEventListener('keydown',(e)=>{ if(e.key==='Escape' && !$('propsPanel').classList.contains('hidden')) closeProps(); });
-
-$('propsSave').addEventListener('click',async()=>{
-  const updated=JSON.parse(JSON.stringify(propsOriginal));
-  Object.entries(propsFields).forEach(([key,{type,fieldId}])=>{
-    const el=$(fieldId);
-    if(!el) return;
-    let val;
-    if(type==='boolean') val=el.checked;
-    else if(type==='number') val=parseFloat(el.value);
-    else val=el.value;
-    setNestedValue(updated,key,val);
-  });
-  
-  $('propsSave').disabled=true;
-  
-  await sendRequest('SetInputSettings',{inputName:propsInputName,inputSettings:updated,overlay:true});
-
-  if (propsCurrentItem) {
-    let sx = parseFloat($('propScaleX').value) || 1;
-    let sy = parseFloat($('propScaleY').value) || 1;
-    if (sizeMode === 'percent') {
-      sx /= 100;
-      sy /= 100;
-    }
-    const transform = { scaleX: sx, scaleY: sy };
-    const posX = parseFloat($('propPosX').value);
-    const posY = parseFloat($('propPosY').value);
-    if (!isNaN(posX)) transform.positionX = posX;
-    if (!isNaN(posY)) transform.positionY = posY;
-    await req('SetSceneItemTransform', {
-      sceneName: editingScene,
-      sceneItemId: propsCurrentItem.sceneItemId,
-      sceneItemTransform: transform
-    });
-  }
-
-  $('propsSave').disabled=false;
-  closeProps();
-  if(editingScene) loadScene(editingScene);
-});
-
-async function loadAudioInputs(){
-  const il=await req('GetInputList');
-  const list=$('audioList');
-  if(!il || !il.inputs || !il.inputs.length){ list.innerHTML='<div class="empty-note">No inputs found.</div>'; return; }
-  audioInputs=[];
-  for(const inp of il.inputs){
-    const vol=await req('GetInputVolume',{inputName:inp.inputName});
-    if(!vol) continue;
-    const muteRes=await req('GetInputMute',{inputName:inp.inputName});
-    audioInputs.push({
-      inputName:inp.inputName,
-      volumeMul: vol.inputVolumeMul,
-      muted: muteRes?muteRes.inputMuted:false
-    });
-  }
-  renderAudioMixer();
-}
-$('refreshAudioBtn').addEventListener('click', loadAudioInputs);
-
-function renderAudioMixer(){
-  const list=$('audioList');
-  list.innerHTML='';
-  if(!audioInputs.length){ list.innerHTML='<div class="empty-note">No audio-capable inputs found.</div>'; return; }
-  audioInputs.forEach(inp=>{
-    const row=document.createElement('div');
-    row.className='aud-row';
-    const pct=Math.round(Math.min(inp.volumeMul,1)*100);
-    row.innerHTML=`
-      <div class="aud-col">
-        <div class="aud-top">
-          <span class="aud-name" title="${escapeHtml(inp.inputName)}">${escapeHtml(inp.inputName)}</span>
-          <button class="toggle-btn ${vizSources.has(inp.inputName)?'':'off'}" data-role="viz" title="Show in Audio Activity graph">📊</button>
-          <button class="toggle-btn ${inp.muted?'muted':''}" data-role="mute">${inp.muted?'🔇':'🔊'}</button>
-        </div>
-        <input type="range" min="0" max="100" value="${pct}" data-role="vol">
-        <div class="meter-container">
-          <div class="meter-bar" id="meter-${cssSafe(inp.inputName)}"></div>
-        </div>
-      </div>
-    `;
-    row.querySelector('[data-role=viz]').addEventListener('click',()=>{
-      if(vizSources.has(inp.inputName)){
-        vizSources.delete(inp.inputName);
-        vizHistory.delete(inp.inputName);
-      } else {
-        vizSources.add(inp.inputName);
-        vizHistory.set(inp.inputName, []);
-      }
-      renderAudioMixer();
-      renderVizLegend();
-      requestVizDraw();
-    });
-    row.querySelector('[data-role=mute]').addEventListener('click',async()=>{
-      inp.muted=!inp.muted;
-      await req('SetInputMute',{inputName:inp.inputName,inputMuted:inp.muted});
-      renderAudioMixer();
-    });
-    let rafQ=false;
-    row.querySelector('[data-role=vol]').addEventListener('input',(e)=>{
-      inp.volumeMul=e.target.value/100;
-      if(!rafQ){
-        rafQ=true;
-        requestAnimationFrame(()=>{ rafQ=false; req('SetInputVolume',{inputName:inp.inputName,inputVolumeMul:inp.volumeMul}); });
-      }
-    });
-    list.appendChild(row);
-  });
-}
-
-$('addType').addEventListener('change', ()=>{
-  const v = $('addType').value;
-  $('addUrl').classList.toggle('hidden', v!=='browser_source');
-  $('addFile').classList.toggle('hidden', v!=='image_source');
-  $('addText').classList.toggle('hidden', v!=='text_source');
-  $('addDims').classList.toggle('hidden', v==='text_source');
-});
-
-async function getTextInputKind(){
-  const data = await req('GetInputKindList', { unversioned: false });
-  const kinds = (data && data.inputKinds) || [];
-  const priority = ['text_gdiplus_v2','text_ft2_source_v2','text_gdiplus','text_ft2_source'];
-  for(const k of priority){ if(kinds.includes(k)) return k; }
-  return null;
-}
-
-$('addBtn').addEventListener('click', async ()=>{
-  const addErr=$('addErr'); addErr.classList.add('hidden');
-  if(!editingScene){ addErr.textContent='Load a scene first.'; addErr.classList.remove('hidden'); return; }
-  const kind=$('addType').value;
-  const name=$('addName').value.trim();
-  if(!name){ addErr.textContent='Give the source a name.'; addErr.classList.remove('hidden'); return; }
-
-  let actualKind=kind;
-  let inputSettings={};
-  if(kind==='browser_source'){
-    const url=$('addUrl').value.trim();
-    if(!url){ addErr.textContent='Enter the overlay URL.'; addErr.classList.remove('hidden'); return; }
-    inputSettings={ url, width: parseInt($('addW').value)||1280, height: parseInt($('addH').value)||720 };
-  } else if(kind==='image_source'){
-    const file=$('addFile').value.trim();
-    if(!file){ addErr.textContent="Enter the image's file path on their PC."; addErr.classList.remove('hidden'); return; }
-    inputSettings={ file };
-  } else if(kind==='text_source'){
-    const text=$('addText').value;
-    if(!text.trim()){ addErr.textContent='Enter some text.'; addErr.classList.remove('hidden'); return; }
-    const textKind=await getTextInputKind();
-    if(!textKind){ addErr.textContent="Their OBS installation doesn't have a text source type available."; addErr.classList.remove('hidden'); return; }
-    actualKind=textKind;
-    inputSettings={ text };
-  }
-
-  $('addBtn').disabled=true;
-  const d=await sendRequest('CreateInput',{ sceneName: editingScene, inputName: name, inputKind: actualKind, inputSettings });
-  $('addBtn').disabled=false;
-
-  if(!d.requestStatus || !d.requestStatus.result){
-    addErr.textContent='Could not add source: ' + (d.requestStatus && d.requestStatus.comment ? d.requestStatus.comment : 'unknown error.');
-    addErr.classList.remove('hidden');
-    return;
-  }
-
-  const newItemId = d.responseData && d.responseData.sceneItemId;
-  if(newItemId && kind!=='text_source'){
-    await req('SetSceneItemTransform',{
-      sceneName: editingScene,
-      sceneItemId: newItemId,
-      sceneItemTransform:{
-        boundsType:'OBS_BOUNDS_SCALE_OUTER',
-        boundsWidth: baseW, boundsHeight: baseH, boundsAlignment: 0,
-        positionX: 0, positionY: 0
-      }
-    });
-  }
-
-  $('addName').value=''; $('addUrl').value=''; $('addFile').value=''; $('addText').value='';
-  await loadScene(editingScene);
-});
-
-// ---- Upload a local file (HTML overlay or image) straight into a browser_source ----
-function readFileAsText(file){
-  return new Promise((resolve,reject)=>{
-    const r=new FileReader();
-    r.onload=()=>resolve(r.result);
-    r.onerror=()=>reject(new Error('Could not read file.'));
-    r.readAsText(file);
-  });
-}
-function readFileAsDataURL(file){
-  return new Promise((resolve,reject)=>{
-    const r=new FileReader();
-    r.onload=()=>resolve(r.result);
-    r.onerror=()=>reject(new Error('Could not read file.'));
-    r.readAsDataURL(file);
-  });
-}
-function toBase64HtmlUrl(htmlString){
-  return 'data:text/html;charset=utf-8;base64,' + btoa(unescape(encodeURIComponent(htmlString)));
-}
-
-async function createBrowserSourceFromHtml(name, htmlString, width, height, routeAudio){
-  const sourceUrl = toBase64HtmlUrl(htmlString);
-  const d = await sendRequest('CreateInput',{
-    sceneName: editingScene,
-    inputName: name,
-    inputKind: 'browser_source',
-    inputSettings: { url: sourceUrl, width, height, reroute_audio: !!routeAudio }
-  });
-  if(!d.requestStatus || !d.requestStatus.result){
-    throw new Error((d.requestStatus && d.requestStatus.comment) || 'unknown error.');
-  }
-  const newItemId = d.responseData && d.responseData.sceneItemId;
-  if(newItemId){
-    await req('SetSceneItemTransform',{
-      sceneName: editingScene,
-      sceneItemId: newItemId,
-      sceneItemTransform:{
-        boundsType:'OBS_BOUNDS_SCALE_OUTER',
-        boundsWidth: baseW, boundsHeight: baseH, boundsAlignment: 0,
-        positionX: 0, positionY: 0
-      }
-    });
-  }
-}
-
-$('uploadFileBtn').addEventListener('click', async ()=>{
-  const uploadErr=$('uploadErr'); uploadErr.classList.add('hidden');
-  if(!editingScene){ uploadErr.textContent='Load a scene first.'; uploadErr.classList.remove('hidden'); return; }
-  const fileInput=$('uploadFileInput');
-  const file=fileInput.files[0];
-  if(!file){ uploadErr.textContent='Choose a file first.'; uploadErr.classList.remove('hidden'); return; }
-  const name=$('uploadName').value.trim() || file.name;
-  const routeAudio=$('uploadAudio').checked;
-  const isHtml=/\.html?$/i.test(file.name);
-  const isImage=file.type.startsWith('image/');
-  if(!isHtml && !isImage){
-    uploadErr.textContent='Only HTML files and images are supported.';
-    uploadErr.classList.remove('hidden');
-    return;
-  }
-
-  $('uploadFileBtn').disabled=true;
-  try{
-    let htmlString;
-    if(isHtml){
-      htmlString = await readFileAsText(file);
-    } else {
-      const dataUrl = await readFileAsDataURL(file);
-      htmlString = `<!DOCTYPE html><html><head><style>html,body{margin:0;background:transparent;overflow:hidden;}img{width:100%;height:100%;object-fit:contain;}</style></head><body><img src="${dataUrl}"></body></html>`;
-    }
-    const width=parseInt($('addW').value)||1280, height=parseInt($('addH').value)||720;
-    await createBrowserSourceFromHtml(name, htmlString, width, height, routeAudio);
-    $('uploadName').value=''; fileInput.value='';
-    await loadScene(editingScene);
-  } catch(e){
-    uploadErr.textContent='Upload failed: '+e.message;
-    uploadErr.classList.remove('hidden');
-  }
-  $('uploadFileBtn').disabled=false;
-});
-
-function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function cssSafe(s){ return (s||'').replace(/[^a-zA-Z0-9]/g,'_'); }
-
-// ==================== Soundboard ====================
-const SB_POOL_SIZE=16; // max sounds that can genuinely overlap at once (see note in UI)
-$('sbPoolSizeNote').textContent=SB_POOL_SIZE;
-
-let sbState={ boards:[], buttons:{}, sounds:{} };
-let sbActiveBoardId=null;
-let sbEditingButtonId=null; // null = creating new
-let sbSoundMode='existing';
-let sbPendingUpload=null; // {mime, dataUrl, name} staged from file input until Save
-let sbPoolByScene={}; // sceneName -> [{sourceName, buttonId, ready}]
-let sbPoolCursorByScene={};
-let sbPlayingButtons=new Set();
-let sbRecordingHotkey=false;
-
-function sbLoadState(){
-  const saved=appStorageGet('soundboard', null);
-  if(saved) sbState=saved;
-  if(!sbState.boards || !sbState.boards.length){
-    const id='b_'+Date.now();
-    sbState={ boards:[{id,name:'Main',buttonIds:[]}], buttons:{}, sounds:{} };
-  }
-  sbActiveBoardId=sbState.boards[0].id;
-}
-
-function sbSaveState(){
-  appStorageSet('soundboard', sbState);
-}
-
-function sbGetActiveBoard(){
-  return sbState.boards.find(b=>b.id===sbActiveBoardId) || sbState.boards[0];
-}
-
-// ---- Tabs ----
-function sbRenderTabs(){
-  const wrap=$('sbTabs');
-  wrap.innerHTML='';
-  sbState.boards.forEach(board=>{
-    const tab=document.createElement('div');
-    tab.className='sb-tab'+(board.id===sbActiveBoardId?' active':'');
-    tab.innerHTML=`<span class="sb-tab-name">${escapeHtml(board.name)}</span><span class="sb-tab-close">✕</span>`;
-    tab.querySelector('.sb-tab-name').addEventListener('click',()=>{ sbActiveBoardId=board.id; sbRenderTabs(); sbRenderGrid(); });
-    tab.querySelector('.sb-tab-name').addEventListener('dblclick',()=>{
-      const name=prompt('Rename soundboard:', board.name);
-      if(name && name.trim()){ board.name=name.trim(); sbSaveState(); sbRenderTabs(); }
-    });
-    tab.querySelector('.sb-tab-close').addEventListener('click',(e)=>{
-      e.stopPropagation();
-      if(sbState.boards.length<=1){ alert("Can't delete the last soundboard."); return; }
-      if(!confirm(`Delete the "${board.name}" soundboard? Its buttons will be removed (the underlying sounds stay in your library).`)) return;
-      board.buttonIds.forEach(bid=>delete sbState.buttons[bid]);
-      sbState.boards=sbState.boards.filter(b=>b.id!==board.id);
-      if(sbActiveBoardId===board.id) sbActiveBoardId=sbState.boards[0].id;
-      sbSaveState(); sbRenderTabs(); sbRenderGrid();
-    });
-    wrap.appendChild(tab);
-  });
-  const addTab=document.createElement('button');
-  addTab.className='sb-tab-add';
-  addTab.textContent='+ Board';
-  addTab.addEventListener('click',()=>{
-    const name=prompt('New soundboard name:','New Board');
-    if(!name || !name.trim()) return;
-    const id='b_'+Date.now();
-    sbState.boards.push({id,name:name.trim(),buttonIds:[]});
-    sbActiveBoardId=id;
-    sbSaveState(); sbRenderTabs(); sbRenderGrid();
-  });
-  wrap.appendChild(addTab);
-}
-
-// ---- Grid ----
-function sbRenderGrid(){
-  const grid=$('sbGrid');
-  grid.innerHTML='';
-  const board=sbGetActiveBoard();
-  if(!board) return;
-  board.buttonIds.forEach(bid=>{
-    const btn=sbState.buttons[bid];
-    if(!btn) return;
-    const tile=document.createElement('div');
-    tile.className='sb-btn'+(sbPlayingButtons.has(bid)?' playing':'');
-    tile.style.background=`linear-gradient(160deg, ${btn.color}, ${sbShade(btn.color,-25)})`;
-    tile.dataset.buttonId=bid;
-    tile.innerHTML=`
-      ${btn.hotkey?`<span class="sb-hotkey">${escapeHtml(btn.hotkey)}</span>`:''}
-      <span class="sb-edit" title="Edit">⚙</span>
-      <span class="sb-icon">${escapeHtml(btn.icon||'🔊')}</span>
-      <span class="sb-name">${escapeHtml(btn.name||'Sound')}</span>
-    `;
-    tile.addEventListener('click',(e)=>{
-      if(e.target.closest('.sb-edit')) return;
-      sbPlayButton(bid);
-    });
-    tile.querySelector('.sb-edit').addEventListener('click',(e)=>{
-      e.stopPropagation();
-      sbOpenModal(bid);
-    });
-    grid.appendChild(tile);
-  });
-  const addTile=document.createElement('div');
-  addTile.className='sb-add-tile';
-  addTile.textContent='+';
-  addTile.title='Add a soundboard button';
-  addTile.addEventListener('click',()=>sbOpenModal(null));
-  grid.appendChild(addTile);
-}
-
-function sbShade(hex,pct){
-  hex=(hex||'#7c5cff').replace('#','');
-  if(hex.length===3) hex=hex.split('').map(c=>c+c).join('');
-  const num=parseInt(hex,16);
-  let r=(num>>16)+Math.round(255*(pct/100));
-  let g=((num>>8)&0xff)+Math.round(255*(pct/100));
-  let b=(num&0xff)+Math.round(255*(pct/100));
-  r=Math.max(0,Math.min(255,r)); g=Math.max(0,Math.min(255,g)); b=Math.max(0,Math.min(255,b));
-  return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
-}
-
-function sbSetPlayingUI(buttonId,isPlaying){
-  if(isPlaying) sbPlayingButtons.add(buttonId); else sbPlayingButtons.delete(buttonId);
-  const tile=document.querySelector(`.sb-btn[data-button-id="${CSS.escape(buttonId)}"]`);
-  if(tile) tile.classList.toggle('playing',isPlaying);
-}
-
-// ---- Sound library ----
-function sbRenderLibrary(){
-  const list=$('sbLibraryList');
-  const ids=Object.keys(sbState.sounds);
-  $('sbLibraryCount').textContent=ids.length?`(${ids.length})`:'';
-  if(!ids.length){ list.innerHTML='<div class="empty-note">No sounds added yet.</div>'; return; }
-  list.innerHTML='';
-  ids.forEach(id=>{
-    const s=sbState.sounds[id];
-    const usedBy=Object.values(sbState.buttons).filter(b=>b.soundId===id).length;
-    const row=document.createElement('div');
-    row.className='sb-source-row';
-    row.innerHTML=`
-      <span class="sb-source-name" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</span>
-      <span class="sb-source-kind">${s.kind==='url'?'URL':'File'} · used by ${usedBy}</span>
-      <button class="toggle-btn danger" data-role="del" title="Delete from library">🗑</button>
-    `;
-    row.querySelector('[data-role=del]').addEventListener('click',()=>{
-      if(usedBy>0){ alert(`Can't delete — ${usedBy} button(s) still use this sound. Change or delete those buttons first.`); return; }
-      delete sbState.sounds[id];
-      sbSaveState(); sbRenderLibrary();
-    });
-    list.appendChild(row);
-  });
-}
-
-$('sbLibraryToggle').addEventListener('click',()=>{
-  const list=$('sbLibraryList');
-  const collapsed=list.classList.toggle('hidden');
-  $('sbLibraryCaret').textContent=collapsed?'▸':'▾';
-});
-
-// ---- Modal ----
-function sbPopulateExistingSelect(){
-  const sel=$('sbFieldExisting');
-  sel.innerHTML='';
-  const ids=Object.keys(sbState.sounds);
-  if(!ids.length){
-    sel.innerHTML='<option value="">(no sounds in library yet — use Upload or URL)</option>';
-    return;
-  }
-  ids.forEach(id=>{
-    const opt=document.createElement('option');
-    opt.value=id; opt.textContent=sbState.sounds[id].name;
-    sel.appendChild(opt);
-  });
-}
-
-function sbSetSoundMode(mode){
-  sbSoundMode=mode;
-  document.querySelectorAll('#sbSoundModeToggle button').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
-  $('sbModeExisting').classList.toggle('hidden',mode!=='existing');
-  $('sbModeUpload').classList.toggle('hidden',mode!=='upload');
-  $('sbModeUrl').classList.toggle('hidden',mode!=='url');
-}
-document.querySelectorAll('#sbSoundModeToggle button').forEach(b=>b.addEventListener('click',()=>sbSetSoundMode(b.dataset.mode)));
-
-function sbOpenModal(buttonId){
-  sbEditingButtonId=buttonId;
-  sbPendingUpload=null;
-  $('sbModalErr').classList.add('hidden');
-  sbPopulateExistingSelect();
-  const btn=buttonId?sbState.buttons[buttonId]:null;
-
-  $('sbModalTitle').textContent=btn?'Edit Button':'New Button';
-  $('sbFieldName').value=btn?btn.name:'';
-  $('sbFieldIcon').value=btn?(btn.icon||'🔊'):'🔊';
-  $('sbFieldColor').value=btn?(btn.color||'#7c5cff'):'#7c5cff';
-  $('sbFieldVolume').value=btn?btn.volume:100;
-  $('sbVolLabel').textContent=(btn?btn.volume:100)+'%';
-  $('sbFieldLoop').checked=btn?!!btn.loop:false;
-  $('sbFieldOneInstance').checked=btn?!!btn.oneInstance:false;
-  $('sbFieldHotkey').value=btn?(btn.hotkey||''):'';
-  $('sbFieldUrl').value='';
-  $('sbFieldFile').value='';
-  $('sbDeleteBtn').style.display=btn?'inline-block':'none';
-
-  if(btn && btn.soundId && sbState.sounds[btn.soundId]){
-    sbSetSoundMode('existing');
-    $('sbFieldExisting').value=btn.soundId;
-  } else {
-    sbSetSoundMode(Object.keys(sbState.sounds).length?'existing':'upload');
-  }
-
-  $('sbModalBackdrop').classList.remove('hidden');
-  $('sbButtonModal').classList.remove('hidden');
-}
-
-function sbCloseModal(){
-  $('sbModalBackdrop').classList.add('hidden');
-  $('sbButtonModal').classList.add('hidden');
-  sbRecordingHotkey=false;
-  $('sbRecordHotkeyBtn').textContent='Set';
-}
-$('sbModalCancel').addEventListener('click', sbCloseModal);
-$('sbModalBackdrop').addEventListener('click', sbCloseModal);
-$('sbFieldVolume').addEventListener('input',()=>{ $('sbVolLabel').textContent=$('sbFieldVolume').value+'%'; });
-
-$('sbRecordHotkeyBtn').addEventListener('click',()=>{
-  sbRecordingHotkey=true;
-  $('sbRecordHotkeyBtn').textContent='Press a key…';
-  $('sbFieldHotkey').value='';
-});
-$('sbClearHotkeyBtn').addEventListener('click',()=>{ $('sbFieldHotkey').value=''; });
-
-window.addEventListener('keydown',(e)=>{
-  if(sbRecordingHotkey){
-    e.preventDefault();
-    if(['Control','Shift','Alt','Meta'].includes(e.key)) return;
-    const parts=[];
-    if(e.ctrlKey) parts.push('Ctrl');
-    if(e.altKey) parts.push('Alt');
-    if(e.shiftKey) parts.push('Shift');
-    parts.push(e.key.length===1?e.key.toUpperCase():e.key);
-    $('sbFieldHotkey').value=parts.join('+');
-    sbRecordingHotkey=false;
-    $('sbRecordHotkeyBtn').textContent='Set';
-    return;
-  }
-  if(sceneHotkeyRecordingFor){
-    e.preventDefault();
-    if(['Control','Shift','Alt','Meta'].includes(e.key)) return;
-    const parts=[];
-    if(e.ctrlKey) parts.push('Ctrl');
-    if(e.altKey) parts.push('Alt');
-    if(e.shiftKey) parts.push('Shift');
-    parts.push(e.key.length===1?e.key.toUpperCase():e.key);
-    setSceneHotkey(sceneHotkeyRecordingFor, parts.join('+'));
-    sceneHotkeyRecordingFor=null;
-    return;
-  }
-
-  // App-level shortcuts (work even while a field is focused)
-  if(currentProfileId && e.ctrlKey && !e.altKey && e.key.toLowerCase()==='k'){
-    e.preventDefault(); openCommandPalette(); return;
-  }
-  if(currentProfileId && e.ctrlKey && !e.altKey && e.key.toLowerCase()==='p'){
-    e.preventDefault(); openQuickSwitcher(); return;
-  }
-  if(e.key==='Escape'){
-    if(!$('commandPalette').classList.contains('hidden')) closeCommandPalette();
-    if(!$('quickSwitcher').classList.contains('hidden')) closeQuickSwitcher();
-  }
-
-  // Global soundboard/scene hotkeys (ignored while typing in a field)
-  const tag=(document.activeElement && document.activeElement.tagName || '').toLowerCase();
-  if(tag==='input' || tag==='textarea' || tag==='select') return;
-  const parts=[];
-  if(e.ctrlKey) parts.push('Ctrl');
-  if(e.altKey) parts.push('Alt');
-  if(e.shiftKey) parts.push('Shift');
-  if(['Control','Shift','Alt','Meta'].includes(e.key)) return;
-  parts.push(e.key.length===1?e.key.toUpperCase():e.key);
-  const combo=parts.join('+');
-  const match=Object.values(sbState.buttons).find(b=>b.hotkey===combo);
-  if(match){ e.preventDefault(); sbPlayButton(match.id); return; }
-  const sceneHotkeys=appStorageGet('sceneHotkeys', {});
-  const sceneName=Object.keys(sceneHotkeys).find(k=>sceneHotkeys[k]===combo);
-  if(sceneName && scenesData.some(s=>s.sceneName===sceneName)){ e.preventDefault(); goLive(sceneName); }
-});
-
-$('sbFieldFile').addEventListener('change', async ()=>{
-  const file=$('sbFieldFile').files[0];
-  if(!file) { sbPendingUpload=null; return; }
-  try{
-    const dataUrl=await readFileAsDataURL(file);
-    sbPendingUpload={ name:file.name, dataUrl };
-  }catch(e){
-    $('sbModalErr').textContent='Could not read that file.';
-    $('sbModalErr').classList.remove('hidden');
-  }
-});
-
-function sbResolveOrCreateSound(){
-  if(sbSoundMode==='existing'){
-    const id=$('sbFieldExisting').value;
-    return id && sbState.sounds[id] ? id : null;
-  }
-  if(sbSoundMode==='upload'){
-    if(!sbPendingUpload){
-      const btn=sbEditingButtonId?sbState.buttons[sbEditingButtonId]:null;
-      return btn?btn.soundId:null; // keep existing sound if no new file chosen while editing
-    }
-    const id='s_'+Date.now();
-    sbState.sounds[id]={ id, name:sbPendingUpload.name, kind:'file', data:sbPendingUpload.dataUrl };
-    return id;
-  }
-  if(sbSoundMode==='url'){
-    const url=$('sbFieldUrl').value.trim();
-    if(!url) {
-      const btn=sbEditingButtonId?sbState.buttons[sbEditingButtonId]:null;
-      return btn?btn.soundId:null;
-    }
-    const existing=Object.values(sbState.sounds).find(s=>s.kind==='url' && s.data===url);
-    if(existing) return existing.id;
-    const id='s_'+Date.now();
-    sbState.sounds[id]={ id, name:url.split('/').pop()||url, kind:'url', data:url };
-    return id;
-  }
-  return null;
-}
-
-$('sbModalSave').addEventListener('click',()=>{
-  const name=$('sbFieldName').value.trim();
-  if(!name){ $('sbModalErr').textContent='Give it a name.'; $('sbModalErr').classList.remove('hidden'); return; }
-  const soundId=sbResolveOrCreateSound();
-  if(!soundId){ $('sbModalErr').textContent='Choose, upload, or link a sound first.'; $('sbModalErr').classList.remove('hidden'); return; }
-
-  const hotkey=$('sbFieldHotkey').value.trim();
-  if(hotkey){
-    const clash=Object.values(sbState.buttons).find(b=>b.hotkey===hotkey && b.id!==sbEditingButtonId);
-    if(clash){ $('sbModalErr').textContent=`"${hotkey}" is already used by "${clash.name}".`; $('sbModalErr').classList.remove('hidden'); return; }
-  }
-
-  const data={
-    name, icon:$('sbFieldIcon').value.trim()||'🔊', color:$('sbFieldColor').value,
-    soundId, volume:parseInt($('sbFieldVolume').value,10),
-    loop:$('sbFieldLoop').checked, oneInstance:$('sbFieldOneInstance').checked,
-    hotkey: hotkey||null
-  };
-
-  if(sbEditingButtonId){
-    sbState.buttons[sbEditingButtonId]={ ...sbState.buttons[sbEditingButtonId], ...data };
-  } else {
-    const id='btn_'+Date.now();
-    sbState.buttons[id]={ id, ...data };
-    sbGetActiveBoard().buttonIds.push(id);
-  }
-  sbSaveState();
-  sbCloseModal();
-  sbRenderGrid();
-  sbRenderLibrary();
-});
-
-$('sbDeleteBtn').addEventListener('click',()=>{
-  if(!sbEditingButtonId) return;
-  if(!confirm('Delete this soundboard button? (The underlying sound stays in your library if other buttons use it.)')) return;
-  delete sbState.buttons[sbEditingButtonId];
-  sbState.boards.forEach(b=>{ b.buttonIds=b.buttonIds.filter(id=>id!==sbEditingButtonId); });
-  sbSaveState();
-  sbCloseModal();
-  sbRenderGrid();
-  sbRenderLibrary();
-});
-
-// ---- Playback via a pool of hidden OBS browser sources ----
-function sbSilentHtml(){
-  return '<!DOCTYPE html><html><head><style>html,body{margin:0;background:transparent;}</style></head><body></body></html>';
-}
-
-async function sbEnsurePoolSlot(sceneName){
-  if(!sbPoolByScene[sceneName]) sbPoolByScene[sceneName]=[];
-  if(!sbPoolCursorByScene[sceneName]) sbPoolCursorByScene[sceneName]=0;
-  const pool=sbPoolByScene[sceneName];
-  if(pool.length<SB_POOL_SIZE){
-    const idx=pool.length+1;
-    const name=`Soundboard Player ${idx} (${sceneName})`;
-    const already=stageItems.some(i=>i.sourceName===name) || (await req('GetInputList'))?.inputs?.some(i=>i.inputName===name);
-    if(!already){
-      const d=await sendRequest('CreateInput',{
-        sceneName, inputName:name, inputKind:'browser_source',
-        inputSettings:{ url: toBase64HtmlUrl(sbSilentHtml()), width:8, height:8 }
-      });
-      if(!d.requestStatus || !d.requestStatus.result){
-        throw new Error((d.requestStatus && d.requestStatus.comment) || 'Could not create the soundboard player source.');
-      }
-    } else {
-      // Source exists already (e.g. from a previous session) — make sure it's in this scene.
-      await req('CreateSceneItem',{ sceneName, sourceName:name }).catch(()=>{});
-    }
-    const slot={ sourceName:name, buttonId:null };
-    pool.push(slot);
-    return slot;
-  }
-  // Pool is full — round-robin reuse the oldest-assigned slot.
-  const cursor=sbPoolCursorByScene[sceneName];
-  sbPoolCursorByScene[sceneName]=(cursor+1)%SB_POOL_SIZE;
-  return pool[cursor];
-}
-
-async function sbPlayButton(buttonId){
-  const btn=sbState.buttons[buttonId];
-  if(!btn) return;
-  const sound=sbState.sounds[btn.soundId];
-  if(!sound){ alert('This button has no sound assigned. Edit it to add one.'); return; }
-  if(!currentProgramScene){ alert('Go live on a scene first — the soundboard plays through whatever scene is currently live.'); return; }
-
-  if(btn.oneInstance){
-    const pool=sbPoolByScene[currentProgramScene]||[];
-    const slot=pool.find(s=>s.buttonId===buttonId);
-    if(slot){ await sbStopSlot(slot); }
-  }
-
-  let slot;
-  try{ slot=await sbEnsurePoolSlot(currentProgramScene); }
-  catch(e){ alert('Soundboard error: '+e.message); return; }
-
-  slot.buttonId=buttonId;
-  const vol=(btn.volume!=null?btn.volume:100)/100;
-  const html=`<!DOCTYPE html><html><head><style>html,body{margin:0;background:transparent;}</style></head><body>
-<audio id="a" src="${escapeHtml(sound.data)}" autoplay${btn.loop?' loop':''}></audio>
-<script>document.getElementById('a').volume=${vol};<\/script>
-</body></html>`;
-  await sendRequest('SetInputSettings',{ inputName:slot.sourceName, inputSettings:{ url: toBase64HtmlUrl(html) }, overlay:false });
-  sbSetPlayingUI(buttonId,true);
-  logActivity('Played '+btn.name);
-  // We have no playback-finished signal from inside OBS's browser process, so estimate visually.
-  setTimeout(()=>{ if(!btn.loop) sbSetPlayingUI(buttonId,false); }, 4000);
-}
-
-async function sbStopSlot(slot){
-  slot.buttonId=null;
-  await sendRequest('SetInputSettings',{ inputName:slot.sourceName, inputSettings:{ url: toBase64HtmlUrl(sbSilentHtml()) }, overlay:false }).catch(()=>{});
-}
-
-$('sbStopAllBtn').addEventListener('click', async ()=>{
-  sbPlayingButtons.forEach(id=>sbSetPlayingUI(id,false));
-  for(const sceneName of Object.keys(sbPoolByScene)){
-    for(const slot of sbPoolByScene[sceneName]) await sbStopSlot(slot);
-  }
-});
-
-function initSoundboardUI(){
-  sbLoadState();
-  sbRenderTabs();
-  sbRenderGrid();
-  sbRenderLibrary();
-}
-
-function initVizColors(){
-  const saved=appStorageGet('vizColors', null);
-  if(saved) Object.entries(saved).forEach(([name,color])=>vizColorOverrides.set(name,color));
-}
-
-// ==================== App storage layer (profile-scoped) ====================
-// Uses the Electron main process (disk-backed, per profile) when running as
-// the desktop app; falls back to localStorage when opened as a plain web page.
-async function appStorageLoad(){
-  if(window.desktop){
-    appStorageCache = await window.desktop.store.get(currentProfileId) || {};
-  } else {
-    try{ appStorageCache = JSON.parse(localStorage.getItem('obsControlStore_'+(currentProfileId||'default'))||'{}'); }
-    catch(e){ appStorageCache={}; }
-  }
-}
-function appStorageGet(key, fallback){
-  return (key in appStorageCache) ? appStorageCache[key] : fallback;
-}
-function appStorageSet(key, value){
-  appStorageCache[key]=value;
-  if(window.desktop){
-    window.desktop.store.set(currentProfileId, appStorageCache);
-  } else {
-    try{ localStorage.setItem('obsControlStore_'+(currentProfileId||'default'), JSON.stringify(appStorageCache)); }catch(e){}
-  }
-}
-
-// ==================== Toast notifications ====================
-function notify(message, type){
-  const stack=$('toastStack');
-  const el=document.createElement('div');
-  el.className='toast'+(type?' '+type:'');
-  el.textContent=message;
-  stack.appendChild(el);
-  setTimeout(()=>{
-    el.classList.add('leaving');
-    setTimeout(()=>el.remove(),200);
-  },3200);
-}
-
-// ==================== Activity log ====================
-const ACTIVITY_LOG_MAX=200;
-
-function initActivityLog(){
-  renderActivityLog();
-}
-
-function logActivity(text){
-  const log=appStorageGet('activityLog', []);
-  log.unshift({ t: Date.now(), text });
-  if(log.length>ACTIVITY_LOG_MAX) log.length=ACTIVITY_LOG_MAX;
-  appStorageSet('activityLog', log);
-  renderActivityLog();
-}
-
-function renderActivityLog(){
-  const list=$('activityLogList');
-  if(!list) return;
-  const log=appStorageGet('activityLog', []);
-  if(!log.length){ list.innerHTML='<div class="empty-note">Nothing yet.</div>'; return; }
-  list.innerHTML='';
-  log.forEach(entry=>{
-    const row=document.createElement('div');
-    row.className='log-row';
-    const d=new Date(entry.t);
-    const time=d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
-    row.innerHTML=`<span class="log-time">${time}</span><span>${escapeHtml(entry.text)}</span>`;
-    list.appendChild(row);
-  });
-}
-
-$('clearLogBtn').addEventListener('click',()=>{
-  if(!confirm('Clear the activity log?')) return;
-  appStorageSet('activityLog', []);
-  renderActivityLog();
-});
-
-// ==================== Command palette (Ctrl+K) ====================
-function buildPaletteItems(){
-  const items=[];
-  scenesData.forEach(s=>{
-    items.push({ kind:'Scene', label:'Go live: '+s.sceneName, run:()=>goLive(s.sceneName) });
-  });
-  stageItems.forEach(it=>{
-    items.push({ kind:'Source', label:(it.sceneItemEnabled===false?'Show: ':'Hide: ')+it.sourceName, run:()=>{
-      const newVal=it.sceneItemEnabled===false;
-      req('SetSceneItemEnabled',{sceneName:editingScene,sceneItemId:it.sceneItemId,sceneItemEnabled:newVal}).then(()=>{
-        it.sceneItemEnabled=newVal; renderStage(false); renderSourceList();
-        logActivity((newVal?'Showed ':'Hid ')+it.sourceName);
-      });
-    }});
-  });
-  Object.values(sbState.buttons||{}).forEach(b=>{
-    items.push({ kind:'Sound', label:'Play: '+b.name, run:()=>sbPlayButton(b.id) });
-  });
-  return items;
-}
-
-function openCommandPalette(){
-  paletteItems=buildPaletteItems();
-  paletteActiveIndex=0;
-  $('paletteInput').value='';
-  renderPaletteResults(paletteItems);
-  $('paletteBackdrop').classList.remove('hidden');
-  $('commandPalette').classList.remove('hidden');
-  $('paletteInput').focus();
-}
-function closeCommandPalette(){
-  $('paletteBackdrop').classList.add('hidden');
-  $('commandPalette').classList.add('hidden');
-}
-$('paletteBackdrop').addEventListener('click', closeCommandPalette);
-
-function renderPaletteResults(items){
-  const wrap=$('paletteResults');
-  wrap.innerHTML='';
-  if(!items.length){ wrap.innerHTML='<div class="palette-empty">No matches.</div>'; return; }
-  items.slice(0,30).forEach((item,i)=>{
-    const row=document.createElement('div');
-    row.className='palette-item'+(i===paletteActiveIndex?' active':'');
-    row.innerHTML=`<span>${escapeHtml(item.label)}</span><span class="palette-kind">${item.kind}</span>`;
-    row.addEventListener('click',()=>{ item.run(); closeCommandPalette(); });
-    wrap.appendChild(row);
-  });
-}
-
-$('paletteInput').addEventListener('input',()=>{
-  const q=$('paletteInput').value.trim().toLowerCase();
-  const filtered=q?paletteItems.filter(i=>i.label.toLowerCase().includes(q)):paletteItems;
-  paletteActiveIndex=0;
-  renderPaletteResults(filtered);
-});
-$('paletteInput').addEventListener('keydown',(e)=>{
-  const q=$('paletteInput').value.trim().toLowerCase();
-  const filtered=q?paletteItems.filter(i=>i.label.toLowerCase().includes(q)):paletteItems;
-  if(e.key==='ArrowDown'){ e.preventDefault(); paletteActiveIndex=Math.min(paletteActiveIndex+1, Math.min(filtered.length,30)-1); renderPaletteResults(filtered); }
-  else if(e.key==='ArrowUp'){ e.preventDefault(); paletteActiveIndex=Math.max(paletteActiveIndex-1,0); renderPaletteResults(filtered); }
-  else if(e.key==='Enter'){ e.preventDefault(); const item=filtered[paletteActiveIndex]; if(item){ item.run(); closeCommandPalette(); } }
-});
-
-// ==================== Quick profile switcher (Ctrl+P) ====================
-async function openQuickSwitcher(){
-  if(!window.desktop) return;
-  const profiles=await window.desktop.profiles.list();
-  const list=$('qsList');
-  list.innerHTML='';
-  profiles.sort((a,b)=>(b.lastUsedAt||0)-(a.lastUsedAt||0)).forEach(p=>{
-    const row=document.createElement('div');
-    row.className='qs-row'+(p.id===currentProfileId?' active':'');
-    row.innerHTML=`<span class="qs-avatar">${escapeHtml(p.avatar||'🎬')}</span><span>${escapeHtml(p.name)}</span>`;
-    row.addEventListener('click', async ()=>{
-      closeQuickSwitcher();
-      if(p.id===currentProfileId) return;
-      if(ws){ try{ ws.close(); }catch(e){} }
-      plConnections=await window.desktop.connections.list();
-      await plSelectProfile(p);
-    });
-    list.appendChild(row);
-  });
-  const manageRow=document.createElement('div');
-  manageRow.className='qs-row';
-  manageRow.style.color='var(--muted)';
-  manageRow.innerHTML=`<span class="qs-avatar">⚙</span><span>Manage all profiles…</span>`;
-  manageRow.addEventListener('click',()=>{ closeQuickSwitcher(); goToFullLauncher(); });
-  list.appendChild(manageRow);
-
-  $('switcherBackdrop').classList.remove('hidden');
-  $('quickSwitcher').classList.remove('hidden');
-}
-function closeQuickSwitcher(){
-  $('switcherBackdrop').classList.add('hidden');
-  $('quickSwitcher').classList.add('hidden');
-}
-$('switcherBackdrop').addEventListener('click', closeQuickSwitcher);
-
-// ==================== Profile launcher ====================
-const PL_AVATARS=['🎬','🎮','🎙️','📺','🎧','🖥️','🎵','⚡','🚀','🧪','🐾','🌟'];
-
-async function initProfileLauncher(){
-  if(!window.desktop){
-    // Running as a plain web page (no Electron) — skip profiles entirely, behave like before.
-    currentProfileId='default';
-    await appStorageLoad();
-    initVizColors();
-    initSoundboardUI();
-    initActivityLog();
-    $('appRoot').classList.remove('hidden');
-    return;
-  }
-  plConnections = await window.desktop.connections.list();
-  const profiles = await window.desktop.profiles.list();
-  if(!profiles.length){
-    plOpenModal(null); // force creating the first profile
-    $('profileLauncher').classList.remove('hidden');
-    return;
-  }
-  await plRenderGrid();
-  $('profileLauncher').classList.remove('hidden');
-}
-
-async function plRenderGrid(){
-  const profiles = await window.desktop.profiles.list();
-  const grid=$('plGrid');
-  grid.innerHTML='';
-  profiles.sort((a,b)=>(b.lastUsedAt||0)-(a.lastUsedAt||0)).forEach(p=>{
-    const card=document.createElement('div');
-    card.className='pl-card';
-    const conn=plConnections.find(c=>c.id===p.connectionId);
-    card.innerHTML=`
-      <div class="pl-avatar">
-        ${escapeHtml(p.avatar||'🎬')}
-        <span class="pl-status-dot ${conn?'ok':''}"></span>
-        <span class="pl-edit" title="Edit profile">⚙</span>
-      </div>
-      <div class="pl-name">${escapeHtml(p.name)}</div>
-      <div class="pl-meta">${conn?escapeHtml(conn.name):'No OBS connection set'}</div>
-      <div class="pl-meta">${p.lastUsedAt?plRelativeTime(p.lastUsedAt):'Never used'}</div>
-    `;
-    card.querySelector('.pl-edit').addEventListener('click',(e)=>{ e.stopPropagation(); plOpenModal(p.id); });
-    card.addEventListener('click',()=>plSelectProfile(p));
-    grid.appendChild(card);
-  });
-  const addCard=document.createElement('div');
-  addCard.className='pl-card pl-add';
-  addCard.innerHTML=`<div class="pl-avatar">+</div><div class="pl-name">Add Profile</div><div class="pl-meta">&nbsp;</div>`;
-  addCard.addEventListener('click',()=>plOpenModal(null));
-  grid.appendChild(addCard);
-}
-
-function plRelativeTime(ts){
-  const mins=Math.floor((Date.now()-ts)/60000);
-  if(mins<1) return 'Just now';
-  if(mins<60) return mins+'m ago';
-  const hrs=Math.floor(mins/60);
-  if(hrs<24) return hrs+'h ago';
-  const days=Math.floor(hrs/24);
-  return days+'d ago';
-}
-
-async function plSelectProfile(profile){
-  currentProfileId=profile.id;
-  await window.desktop.profiles.touch(profile.id);
-  await appStorageLoad();
-  initVizColors();
-  initSoundboardUI();
-  initActivityLog();
-
-  $('profileLauncher').classList.add('hidden');
-  $('appRoot').classList.remove('hidden');
-  $('profileBar').classList.remove('hidden');
-  $('profileBarAvatar').textContent=profile.avatar||'🎬';
-  $('profileBarName').textContent=profile.name;
-  notify('Switched to '+profile.name,'ok');
-
-  const conn=plConnections.find(c=>c.id===profile.connectionId);
-  if(conn){
-    $('host').value=conn.host||'';
-    $('port').value=conn.port||'4455';
-    const pw=await window.desktop.connections.getPassword(conn.id);
-    $('pass').value=pw||'';
-    connect();
-  }
-}
-
-async function goToFullLauncher(){
-  if(ws){ try{ ws.close(); }catch(e){} }
-  $('appRoot').classList.add('hidden');
-  $('profileBar').classList.add('hidden');
-  plConnections = await window.desktop.connections.list();
-  await plRenderGrid();
-  $('profileLauncher').classList.remove('hidden');
-}
-
-$('openSearchBtn').addEventListener('click', openCommandPalette);
-$('openSwitcherBtn').addEventListener('click', openQuickSwitcher);
-
-// ---- Create / edit profile modal ----
-function plRenderAvatarPicker(){
-  const wrap=$('plAvatarPicker');
-  wrap.innerHTML='';
-  PL_AVATARS.forEach(a=>{
-    const opt=document.createElement('div');
-    opt.className='pl-avatar-opt'+(a===plSelectedAvatar?' active':'');
-    opt.textContent=a;
-    opt.addEventListener('click',()=>{ plSelectedAvatar=a; plRenderAvatarPicker(); });
-    wrap.appendChild(opt);
-  });
-}
-
-async function plOpenModal(profileId){
-  plEditingProfileId=profileId;
-  $('plModalErr').classList.add('hidden');
-  plConnections = await window.desktop.connections.list();
-
-  const profiles = await window.desktop.profiles.list();
-  const p = profileId ? profiles.find(x=>x.id===profileId) : null;
-
-  $('plModalTitle').textContent = p ? 'Edit Profile' : 'New Profile';
-  $('plFieldName').value = p ? p.name : '';
-  $('plFieldDesc').value = p ? (p.description||'') : '';
-  plSelectedAvatar = p ? (p.avatar||'🎬') : PL_AVATARS[profiles.length % PL_AVATARS.length];
-  plRenderAvatarPicker();
-  $('plDeleteBtn').style.display = p ? 'inline-block' : 'none';
-  $('plDupBtn').style.display = p ? 'inline-block' : 'none';
-  $('plExportBtn').style.display = p ? 'inline-block' : 'none';
-
-  const sel=$('plFieldConnection');
-  sel.innerHTML='<option value="">— No OBS connection —</option><option value="__new__">+ New connection…</option>';
-  plConnections.forEach(c=>{
-    const opt=document.createElement('option');
-    opt.value=c.id; opt.textContent=c.name+' ('+c.host+':'+c.port+')';
-    sel.appendChild(opt);
-  });
-  sel.value = p && p.connectionId ? p.connectionId : '';
-  $('plNewConnFields').classList.toggle('hidden', sel.value!=='__new__');
-  $('plConnName').value=''; $('plConnHost').value=''; $('plConnPort').value='4455'; $('plConnPass').value='';
-
-  $('plModalBackdrop').classList.remove('hidden');
-  $('plModal').classList.remove('hidden');
-}
-$('plFieldConnection').addEventListener('change',()=>{
-  $('plNewConnFields').classList.toggle('hidden', $('plFieldConnection').value!=='__new__');
-});
-
-function plCloseModal(){
-  $('plModalBackdrop').classList.add('hidden');
-  $('plModal').classList.add('hidden');
-}
-$('plModalCancel').addEventListener('click', async ()=>{
-  plCloseModal();
-  const profiles = await window.desktop.profiles.list();
-  if(profiles.length) await plRenderGrid();
-});
-$('plModalBackdrop').addEventListener('click', ()=>$('plModalCancel').click());
-
-$('plModalSave').addEventListener('click', async ()=>{
-  const name=$('plFieldName').value.trim();
-  if(!name){ $('plModalErr').textContent='Give the profile a name.'; $('plModalErr').classList.remove('hidden'); return; }
-
-  let connectionId = $('plFieldConnection').value;
-  if(connectionId==='__new__'){
-    const cname=$('plConnName').value.trim() || (name+' Connection');
-    const host=$('plConnHost').value.trim();
-    if(!host){ $('plModalErr').textContent='Enter a host/IP for the new connection, or choose "No OBS connection".'; $('plModalErr').classList.remove('hidden'); return; }
-    const port=$('plConnPort').value.trim()||'4455';
-    const password=$('plConnPass').value;
-    const saved=await window.desktop.connections.save({ name:cname, host, port, password });
-    plConnections=saved;
-    connectionId = saved.find(c=>c.name===cname && c.host===host)?.id || saved[saved.length-1].id;
-  }
-
-  await window.desktop.profiles.save({
-    id: plEditingProfileId || undefined,
-    name, description: $('plFieldDesc').value.trim(),
-    avatar: plSelectedAvatar,
-    connectionId: connectionId || null
-  });
-  plCloseModal();
-  await plRenderGrid();
-});
-
-$('plDeleteBtn').addEventListener('click', async ()=>{
-  if(!plEditingProfileId) return;
-  if(!confirm('Delete this profile? Its soundboards and saved layout will be removed. (The OBS connection stays, since other profiles may use it.)')) return;
-  await window.desktop.profiles.delete(plEditingProfileId);
-  plCloseModal();
-  const profiles = await window.desktop.profiles.list();
-  if(!profiles.length){ plOpenModal(null); } else { await plRenderGrid(); }
-});
-
-$('plDupBtn').addEventListener('click', async ()=>{
-  if(!plEditingProfileId) return;
-  const orig=(await window.desktop.profiles.list()).find(x=>x.id===plEditingProfileId);
-  await window.desktop.profiles.duplicate(plEditingProfileId, (orig?orig.name:'Profile')+' Copy');
-  plCloseModal();
-  await plRenderGrid();
-});
-// Esc closes the profile editor; Enter in the name field saves
-document.addEventListener('keydown', e=>{
-  if($('plModal').classList.contains('hidden')) return;
-  if(e.key==='Escape') $('plModalCancel').click();
-  if(e.key==='Enter' && e.target===$('plFieldName')) $('plModalSave').click();
-});
-
-// ===== Themes, dock, help, pin, import/export =====
-(function(){
-  const THEMES=['violet','ocean','sunset','forest','light'];
-  const apply=t=>{ document.documentElement.setAttribute('data-theme',t); try{localStorage.setItem('theme',t);}catch(e){} };
-  let cur='violet'; try{ cur=localStorage.getItem('theme')||'violet'; }catch(e){}
-  apply(THEMES.includes(cur)?cur:'violet');
-  const nextTheme=()=>{ const t=THEMES[(THEMES.indexOf(document.documentElement.getAttribute('data-theme'))+1)%THEMES.length]; apply(t); };
-  const help=show=>{ $('helpBox').classList.toggle('hidden',!show); $('helpBackdrop').classList.toggle('hidden',!show); };
-  const pin=async()=>{ const on=await window.desktop.win.togglePin(); $('dockPin').classList.toggle('on',on); };
-  $('dockTheme').addEventListener('click',nextTheme);
-  $('dockPin').addEventListener('click',pin);
-  $('dockHelp').addEventListener('click',()=>help(true));
-  $('helpBackdrop').addEventListener('click',()=>help(false));
-  document.addEventListener('keydown',e=>{
-    const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement&&document.activeElement.tagName);
-    if(e.key==='Escape') help(false);
-    if(e.ctrlKey&&e.shiftKey&&e.key.toLowerCase()==='t'){ e.preventDefault(); nextTheme(); }
-    else if(e.ctrlKey&&!e.shiftKey&&e.key.toLowerCase()==='t'){ e.preventDefault(); pin(); }
-    else if(e.key==='?'&&!typing){ help(true); }
-  });
-  $('plImportBtn').addEventListener('click',async()=>{
-    const r=await window.desktop.profiles.import();
-    if(r&&r.error) alert(r.error);
-    if(r&&r.ok) await plRenderGrid();
-  });
-  $('plExportBtn').addEventListener('click',async()=>{
-    if(!plEditingProfileId) return;
-    const r=await window.desktop.profiles.export(plEditingProfileId);
-    if(r&&r.ok) alert('Profile saved. Your OBS password is not included in the file.');
-  });
-})();
-
-initProfileLauncher();
-</script>
+<script src="js/util.js"></script>
+<script src="js/obs.js"></script>
+<script src="js/hotkeys.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/stage.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/outputs.js"></script>
+<script src="js/soundboard.js"></script>
+<script src="js/macros.js"></script>
+<script src="js/twitch.js"></script>
+<script src="js/palette.js"></script>
+<script src="js/profiles.js"></script>
+<script src="js/main.js"></script>
 </body>
 </html>
