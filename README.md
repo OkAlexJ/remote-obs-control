@@ -77,6 +77,11 @@ npm run build:win-portable   # single portable .exe
 - OBS must be started with `--enable-media-stream` so browser sources may use the camera. First start downloads the face/hair models (needs internet).
 - Try it on a photo: open `renderer/filters/bald-filter.html#{"test":"<image url>"}` from a local server.
 
+**📱 Fake iPhone notifications**
+- iOS-style banner that slides down on the live scene with a chime (synthesized, toggleable), light or dark.
+- 10 one-click presets (Mom, card declined, Screen Time, AirTag…) or write your own sender + message; also a macro step.
+- Uses one "Fake Notification" browser source, created on top of the live scene the first time.
+
 **Everywhere**
 - **Ctrl+K** command palette (scenes, sources, mutes, sounds, macros, stream/record actions…).
 - **Ctrl+P** profile switcher, **Ctrl+,** settings, **Ctrl+Shift+T** next theme, **Ctrl+T** keep on top, **?** help.

@@ -419,3 +419,11 @@ body.compact .topbar{padding:6px 10px;}
 .main:has(> .main-col.panel-off) .sidebar{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:0 14px;align-items:start;}
 .main:has(> .main-col.panel-off) #audioList{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));column-gap:18px;max-height:none;}
 .main:has(> .main-col.panel-off) .aud-row:last-child{border-bottom:1px solid var(--border);}
+
+/* ===== Fake notification panel ===== */
+.notify-presets{display:flex;flex-wrap:wrap;gap:6px;}
+.notify-chip{display:inline-flex;align-items:center;gap:6px;background:var(--field);color:var(--text);border:1px solid var(--border);box-shadow:none;font-weight:500;font-size:12px;padding:6px 10px;border-radius:999px;}
+.notify-chip:hover{border-color:var(--accent);box-shadow:none;}
+.notify-chip span{font-size:14px;}
+.notify-opts{gap:14px;margin-top:8px;}
+.notify-opts .checkbox-row{margin:0;}

@@ -6,6 +6,7 @@ function enterApp(profile){
   initSoundboardUI();
   initMacrosUI();
   initTwitchUI();
+  renderNotifyPanel();
   renderActivityLog();
   applyLayout();
   setConnectedUI(false);

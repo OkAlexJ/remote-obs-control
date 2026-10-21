@@ -319,6 +319,22 @@
       <div id="audioList" class="scroll-list"><div class="empty-note">Loading…</div></div>
     </section>
 
+    <section class="panel sb-panel" data-panel="pranks">
+      <div class="panel-head"><h2>📱 Fake notification</h2></div>
+      <div class="notify-presets" id="notifyPresets"></div>
+      <details class="add-src">
+        <summary>Write your own</summary>
+        <select id="notifyApp"></select>
+        <input id="notifyTitle" placeholder="From (e.g. Mom)" maxlength="60">
+        <input id="notifyText" placeholder="Message" maxlength="160">
+        <button id="notifySendBtn">Send</button>
+      </details>
+      <div class="row notify-opts">
+        <div class="checkbox-row"><input type="checkbox" id="notifySound"><label for="notifySound">Chime</label></div>
+        <div class="checkbox-row"><input type="checkbox" id="notifyDark"><label for="notifyDark">Dark mode</label></div>
+      </div>
+    </section>
+
     <section class="panel sb-panel" data-panel="twitch">
       <div class="panel-head">
         <h2>Twitch <span id="twitchLiveBadge" class="badge hidden">LIVE</span></h2>
@@ -539,6 +555,7 @@
 <script src="js/scenes.js"></script>
 <script src="js/stage.js"></script>
 <script src="js/effects.js"></script>
+<script src="js/notify.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/outputs.js"></script>
 <script src="js/soundboard.js"></script>
