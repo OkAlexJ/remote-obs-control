@@ -71,7 +71,9 @@ npm run build:win-portable   # single portable .exe
 
 **✨ Bald filter**
 - *Add a source → Bald filter*: AI hair detection removes the hair, fills the background back in and draws a shaded scalp textured with your own forehead skin, following your head (~45–50 fps).
-- Placed over the webcam automatically; toggle it with 👁. Works when OBS runs on the same PC as this app (connect to `localhost`) — the app serves the filter on 127.0.0.1:47821, so keep it open.
+- Placed over the webcam automatically; toggle it with 👁. The app serves the filter itself (127.0.0.1:47821), so keep it open while using it.
+  - **OBS on this PC** (connect to `localhost`): works out of the box.
+  - **OBS on another PC**: goes through Tailscale, privately. Run once on the PC with this app: `tailscale serve --bg http://127.0.0.1:47821` (needs HTTPS certificates enabled for your tailnet). The other PC must be on the same tailnet. Undo with `tailscale serve --https=443 off`.
 - OBS must be started with `--enable-media-stream` so browser sources may use the camera. First start downloads the face/hair models (needs internet).
 - Try it on a photo: open `renderer/filters/bald-filter.html#{"test":"<image url>"}` from a local server.
 

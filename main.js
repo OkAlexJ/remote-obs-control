@@ -411,6 +411,33 @@ function startFilterServer() {
 app.whenReady().then(startFilterServer);
 ipcMain.handle('filters:localUrl', () => filterServerUrl);
 
+// For OBS on *another* PC: if Tailscale Serve proxies this machine's https://<name>.ts.net/ to the
+// filter server, other tailnet devices can load the filter securely (tailnet only, nothing public).
+const { execFile } = require('child_process');
+function runTailscale(args) {
+  const candidates = process.platform === 'win32'
+    ? ['tailscale', 'C:\\Program Files\\Tailscale\\tailscale.exe']
+    : ['tailscale', '/Applications/Tailscale.app/Contents/MacOS/Tailscale', '/usr/bin/tailscale'];
+  return new Promise((resolve) => {
+    const attempt = (i) => {
+      if (i >= candidates.length) return resolve(null);
+      execFile(candidates[i], args, { timeout: 5000, windowsHide: true }, (err, stdout) => err ? attempt(i + 1) : resolve(stdout));
+    };
+    attempt(0);
+  });
+}
+ipcMain.handle('filters:tailnetUrl', async () => {
+  const status = await runTailscale(['status', '--json']);
+  if (!status) return { ok: false, reason: 'no-tailscale' };
+  let self;
+  try { self = JSON.parse(status).Self; } catch (e) { return { ok: false, reason: 'no-tailscale' }; }
+  const host = self && self.DNSName ? self.DNSName.replace(/\.$/, '') : '';
+  if (!host) return { ok: false, reason: 'no-tailscale' };
+  const serve = await runTailscale(['serve', 'status', '--json']);
+  const served = !!serve && serve.includes(`127.0.0.1:${FILTER_PORT}`);
+  return served ? { ok: true, url: `https://${host}/` } : { ok: false, reason: 'not-served', host };
+});
+
 // ==================== Window ====================
 ipcMain.handle('window:setPin', (e, on) => {
   if (!mainWindow) return false;

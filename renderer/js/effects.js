@@ -1,17 +1,24 @@
 // ==================== Face effects (bald filter) ====================
-// The filter page runs inside OBS as a Browser Source. Webcams only work on secure pages, and
-// http://localhost counts as secure — so when OBS runs on this PC, this app serves the page itself
-// (see the local filter server in main.js). OBS on another PC would need it hosted on https.
+// The filter page runs inside OBS as a Browser Source. Webcams only work on secure pages:
+//  - OBS on this PC: http://localhost counts as secure, so the app's own filter server is used.
+//  - OBS on another PC: the same server reached through Tailscale Serve (https://<this-pc>.ts.net/),
+//    visible only inside your tailnet. Either way this app must be running for the filter to load.
 const BALD_SOURCE_NAME='Bald Filter';
 const WEBCAM_KINDS=['dshow_input','av_capture_input','av_capture_input_v2','macos-avcapture','v4l2_input'];
 const isLocalHost=h=>/^(localhost|127\.\d+\.\d+\.\d+|::1|\[::1\])$/i.test(String(h||'').trim());
 
 async function baldFilterBaseUrl(){
-  if(!OBS.lastConn || !isLocalHost(OBS.lastConn.host))
-    throw new Error('For now the bald filter only works when OBS is on this same PC (connect to "localhost"). OBS on another PC needs the filter page hosted online.');
-  const base=window.desktop ? await window.desktop.filters.localUrl() : null;
-  if(!base) throw new Error('The bald filter needs the desktop app (its built-in filter server didn\'t start — is another copy of the app running?).');
-  return base+'bald-filter.html';
+  if(!window.desktop) throw new Error('The bald filter needs the desktop app.');
+  if(OBS.lastConn && isLocalHost(OBS.lastConn.host)){
+    const base=await window.desktop.filters.localUrl();
+    if(!base) throw new Error("The app's filter server didn't start — is another copy of the app running?");
+    return base+'bald-filter.html';
+  }
+  const t=await window.desktop.filters.tailnetUrl();
+  if(t.ok) return t.url+'bald-filter.html';
+  if(t.reason==='not-served')
+    throw new Error('To use the bald filter on another PC, share it over your tailnet once. On this PC run:\n\ntailscale serve --bg http://127.0.0.1:47821\n\n(It stays private to your tailnet.)');
+  throw new Error('For OBS on another PC the bald filter goes through Tailscale, but Tailscale isn\'t running on this PC. Start Tailscale, or connect to an OBS on this PC (localhost).');
 }
 
 async function addBaldFilter(){

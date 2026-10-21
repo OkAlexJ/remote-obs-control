@@ -30,7 +30,8 @@ contextBridge.exposeInMainWorld('desktop', {
     open: (kind, channel) => ipcRenderer.invoke('twitch:open', kind, channel)
   },
   filters: {
-    localUrl: () => ipcRenderer.invoke('filters:localUrl')
+    localUrl: () => ipcRenderer.invoke('filters:localUrl'),
+    tailnetUrl: () => ipcRenderer.invoke('filters:tailnetUrl')
   },
   files: {
     saveImage: (dataUrl, name) => ipcRenderer.invoke('file:saveImage', dataUrl, name)
