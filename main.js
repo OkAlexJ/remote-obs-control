@@ -387,6 +387,30 @@ ipcMain.handle('file:saveImage', async (e, dataUrl, suggestedName) => {
   return { ok: true, path: r.filePath };
 });
 
+// ==================== Local filter server ====================
+// Webcam effects (renderer/filters/*.html) run as OBS Browser Sources. Browsers only allow webcam
+// access on secure pages, and http://localhost counts as secure — so when OBS is on this same PC,
+// the app serves the filters itself on 127.0.0.1 (never reachable from other machines).
+const http = require('http');
+const FILTER_PORT = 47821;
+let filterServerUrl = null;
+function startFilterServer() {
+  const dir = path.join(__dirname, 'renderer', 'filters');
+  const server = http.createServer((req, res) => {
+    const name = decodeURIComponent((req.url || '/').split(/[?#]/)[0]).replace(/^\/+/, '') || 'index.html';
+    if (!/^[\w-]+\.html$/.test(name)) { res.writeHead(404); return res.end(); }
+    fs.readFile(path.join(dir, name), (err, data) => {
+      if (err) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      res.end(data);
+    });
+  });
+  server.on('error', (e) => { console.error('Filter server not started:', e.message); filterServerUrl = null; });
+  server.listen(FILTER_PORT, '127.0.0.1', () => { filterServerUrl = `http://localhost:${FILTER_PORT}/`; });
+}
+app.whenReady().then(startFilterServer);
+ipcMain.handle('filters:localUrl', () => filterServerUrl);
+
 // ==================== Window ====================
 ipcMain.handle('window:setPin', (e, on) => {
   if (!mainWindow) return false;

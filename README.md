@@ -69,6 +69,12 @@ npm run build:win-portable   # single portable .exe
   set volume, change a text source, play a sound, stop sounds, wait, start/stop stream, record
   (start/stop/pause/resume), save replay, virtual cam. Hotkeys, test-run, duplicate.
 
+**✨ Bald filter**
+- *Add a source → Bald filter*: AI hair detection removes the hair, fills the background back in and draws a shaded scalp textured with your own forehead skin, following your head (~45–50 fps).
+- Placed over the webcam automatically; toggle it with 👁. Works when OBS runs on the same PC as this app (connect to `localhost`) — the app serves the filter on 127.0.0.1:47821, so keep it open.
+- OBS must be started with `--enable-media-stream` so browser sources may use the camera. First start downloads the face/hair models (needs internet).
+- Try it on a photo: open `renderer/filters/bald-filter.html#{"test":"<image url>"}` from a local server.
+
 **Everywhere**
 - **Ctrl+K** command palette (scenes, sources, mutes, sounds, macros, stream/record actions…).
 - **Ctrl+P** profile switcher, **Ctrl+,** settings, **Ctrl+Shift+T** next theme, **Ctrl+T** keep on top, **?** help.

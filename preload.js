@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('desktop', {
     status: (profileId, channel, clientId) => ipcRenderer.invoke('twitch:status', profileId, channel, clientId),
     open: (kind, channel) => ipcRenderer.invoke('twitch:open', kind, channel)
   },
+  filters: {
+    localUrl: () => ipcRenderer.invoke('filters:localUrl')
+  },
   files: {
     saveImage: (dataUrl, name) => ipcRenderer.invoke('file:saveImage', dataUrl, name)
   },

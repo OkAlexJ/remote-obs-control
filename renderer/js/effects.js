@@ -1,12 +1,22 @@
 // ==================== Face effects (bald filter) ====================
-// The filter page runs inside OBS on the streaming PC as a Browser Source. Webcams only work on pages
-// served over https, so it's loaded from the hosted copy of renderer/filters/bald-filter.html.
-const BALD_FILTER_URL='https://okalexj.github.io/bald-filter/';
+// The filter page runs inside OBS as a Browser Source. Webcams only work on secure pages, and
+// http://localhost counts as secure — so when OBS runs on this PC, this app serves the page itself
+// (see the local filter server in main.js). OBS on another PC would need it hosted on https.
 const BALD_SOURCE_NAME='Bald Filter';
 const WEBCAM_KINDS=['dshow_input','av_capture_input','av_capture_input_v2','macos-avcapture','v4l2_input'];
+const isLocalHost=h=>/^(localhost|127\.\d+\.\d+\.\d+|::1|\[::1\])$/i.test(String(h||'').trim());
+
+async function baldFilterBaseUrl(){
+  if(!OBS.lastConn || !isLocalHost(OBS.lastConn.host))
+    throw new Error('For now the bald filter only works when OBS is on this same PC (connect to "localhost"). OBS on another PC needs the filter page hosted online.');
+  const base=window.desktop ? await window.desktop.filters.localUrl() : null;
+  if(!base) throw new Error('The bald filter needs the desktop app (its built-in filter server didn\'t start — is another copy of the app running?).');
+  return base+'bald-filter.html';
+}
 
 async function addBaldFilter(){
   if(!editingScene) throw new Error('Pick a scene first.');
+  const BALD_FILTER_URL=await baldFilterBaseUrl();
   if(stageItems.some(i=>i.sourceName===BALD_SOURCE_NAME)) throw new Error('This scene already has the bald filter — use 👁 to turn it on and off.');
 
   // Find their webcam in this scene so the filter can sit exactly on top of it
@@ -44,5 +54,5 @@ async function addBaldFilter(){
   logActivity(`Added bald filter to ${editingScene}`);
   await refreshItems();
   tellUser('Bald filter added', (cam ? `It's placed over "${cam.sourceName}", which is now hidden so the filter can use the camera. ` : 'No webcam source was found in this scene, so it was added full-size. ')
-    + 'Toggle it with 👁 in Sources.\n\nIf it says camera access is blocked: on the OBS PC, close OBS, right-click the OBS shortcut → Properties, add  --enable-media-stream  to the end of "Target", and start OBS again. The first start takes a few seconds while it downloads the face/hair models.');
+    + 'Toggle it with 👁 in Sources. Keep this app open while using it — the app is what serves the filter to OBS.\n\nIf it says camera access is blocked: on the OBS PC, close OBS, right-click the OBS shortcut → Properties, add  --enable-media-stream  to the end of "Target", and start OBS again. The first start takes a few seconds while it downloads the face/hair models.');
 }
