@@ -328,7 +328,7 @@
       </div>
       <div class="row tts-row">
         <input type="range" id="ttsVolume" min="0" max="100" title="Volume">
-        <button class="secondary icon" id="ttsPreviewBtn" title="Listen here first (only you hear it)">🎧</button>
+        <button class="secondary icon" id="ttsPreviewBtn" title="Listen here first — only you hear it">🎧 Preview</button>
         <button id="ttsSpeakBtn">Say it</button>
       </div>
     </section>
@@ -336,16 +336,16 @@
     <section class="panel sb-panel" data-panel="pranks">
       <div class="panel-head"><h2>📱 Fake notification</h2></div>
       <div class="notify-presets" id="notifyPresets"></div>
-      <details class="add-src">
-        <summary>Write your own</summary>
-        <select id="notifyApp"></select>
+      <div class="notify-preview" id="notifyPreview" title="Preview — this is what shows on stream"></div>
+      <div class="notify-fields">
+        <select id="notifyApp" title="App"></select>
         <input id="notifyTitle" placeholder="From (e.g. Mom)" maxlength="60">
-        <input id="notifyText" placeholder="Message" maxlength="160">
-        <button id="notifySendBtn">Send</button>
-      </details>
+      </div>
+      <input id="notifyText" placeholder="Message" maxlength="160" style="width:100%;">
       <div class="row notify-opts">
         <div class="checkbox-row"><input type="checkbox" id="notifySound"><label for="notifySound">Chime</label></div>
         <div class="checkbox-row"><input type="checkbox" id="notifyDark"><label for="notifyDark">Dark mode</label></div>
+        <button id="notifySendBtn" style="margin-left:auto;">Send</button>
       </div>
     </section>
 

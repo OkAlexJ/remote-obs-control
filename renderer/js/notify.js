@@ -33,30 +33,39 @@ const NOTIFY_PRESETS=[
   { app:'mail',       title:'Teacher',        text:'Re: Your missing assignments (7)' }
 ];
 
-function notifyHtml({ app, title, text, dark, sound, seconds }){
-  const a=NOTIFY_APPS[app]||NOTIFY_APPS.messages;
-  const secs=Math.max(2,Math.min(30,Number(seconds)||6));
-  // iOS banner metrics (pt × 3): 16pt side margin, 14pt padding, 38pt icon, 15pt text, 20pt line height
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=block">
-<style>
-html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden;}
-body{font-family:-apple-system,"SF Pro Text",Inter,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01";}
-.n{position:absolute;left:48px;right:48px;top:24px;transform:translateY(-130%);display:flex;align-items:center;gap:30px;padding:40px 42px;border-radius:63px;
+// The banner's look and markup — shared by the OBS page and the in-app preview so they always match.
+// iOS banner metrics (pt × 3): 16pt side margin, 14pt padding, 38pt icon, 15pt text, 20pt line height
+function notifyBannerCss(dark){
+  return `.n{display:flex;align-items:center;gap:30px;padding:40px 42px;border-radius:63px;box-sizing:border-box;
+  font-family:-apple-system,"SF Pro Text",Inter,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01";
   background:${dark?'rgba(38,38,40,.86)':'rgba(246,246,246,.86)'};-webkit-backdrop-filter:blur(40px) saturate(180%);backdrop-filter:blur(40px) saturate(180%);
   box-shadow:0 6px 28px rgba(0,0,0,${dark?'.32':'.14'});}
-.n.go{animation:in .62s cubic-bezier(.32,1.28,.5,1) forwards, out .42s cubic-bezier(.55,0,.75,.25) ${secs}s forwards;}
 .i{flex:0 0 auto;width:114px;height:114px;border-radius:25.5px;overflow:hidden;}
 .i svg{display:block;width:100%;height:100%;}
 .c{flex:1;min-width:0;}
 .t{display:flex;align-items:baseline;gap:24px;}
 .h{flex:1;min-width:0;font-weight:600;font-size:45px;line-height:60px;letter-spacing:-.6px;color:${dark?'#fff':'#000'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .w{flex:0 0 auto;font-size:39px;letter-spacing:-.2px;color:${dark?'rgba(235,235,245,.6)':'rgba(60,60,67,.6)'};}
-.m{font-size:45px;line-height:60px;letter-spacing:-.6px;color:${dark?'#fff':'#000'};display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
+.m{font-size:45px;line-height:60px;letter-spacing:-.6px;color:${dark?'#fff':'#000'};display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}`;
+}
+function notifyBannerHtml({ app, title, text }){
+  const a=NOTIFY_APPS[app]||NOTIFY_APPS.messages;
+  return `<div class="n" id="n"><div class="i"><svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">${a.svg}</svg></div><div class="c"><div class="t"><div class="h">${escapeHtml(title)}</div><div class="w">now</div></div><div class="m">${escapeHtml(text)}</div></div></div>`;
+}
+
+function notifyHtml({ app, title, text, dark, sound, seconds }){
+  const secs=Math.max(2,Math.min(30,Number(seconds)||6));
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=block">
+<style>
+html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden;}
+${notifyBannerCss(dark)}
+.n{position:absolute;left:48px;right:48px;top:24px;transform:translateY(-130%);}
+.n.go{animation:in .62s cubic-bezier(.32,1.28,.5,1) forwards, out .42s cubic-bezier(.55,0,.75,.25) ${secs}s forwards;}
 @keyframes in{to{transform:translateY(0);}}
 @keyframes out{from{transform:translateY(0);}to{transform:translateY(-130%);}}
 </style></head><body>
-<div class="n" id="n"><div class="i"><svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">${a.svg}</svg></div><div class="c"><div class="t"><div class="h">${escapeHtml(title)}</div><div class="w">now</div></div><div class="m">${escapeHtml(text)}</div></div></div>
+${notifyBannerHtml({ app, title, text })}
 <script>
 // Wait (briefly) for the font so the text doesn't change shape mid-animation
 let started=false;
@@ -115,7 +124,21 @@ async function sendFakeNotification(n){
   logActivity(`Fake notification: ${n.title} — ${n.text}`);
 }
 
-// ---- Panel ----
+// ---- Panel: pick a preset or write one, see the preview, then Send ----
+const PREVIEW_SCALE=0.27;
+function currentNotify(){
+  const app=$('notifyApp').value||'messages';
+  return { app, title:$('notifyTitle').value.trim()||NOTIFY_APPS[app].name, text:$('notifyText').value.trim() };
+}
+// Draws the real banner (same CSS/markup as on stream) shrunk down, inside a shadow root so its styles stay put
+function updateNotifyPreview(){
+  const host=$('notifyPreview');
+  const root=host.shadowRoot || host.attachShadow({ mode:'open' });
+  root.innerHTML=`<style>:host{display:block;}
+.scale{width:1074px;zoom:${PREVIEW_SCALE};}
+${notifyBannerCss($('notifyDark').checked)}</style>
+<div class="scale">${notifyBannerHtml(currentNotify())}</div>`;
+}
 function renderNotifyPanel(){
   const wrap=$('notifyPresets');
   wrap.innerHTML='';
@@ -123,28 +146,38 @@ function renderNotifyPanel(){
     const b=document.createElement('button');
     b.type='button';
     b.className='notify-chip';
-    b.title=`${p.title}: ${p.text}`;
+    b.title='Preview it — then press Send';
     b.innerHTML=`<span>${escapeHtml(NOTIFY_APPS[p.app].glyph)}</span>${escapeHtml(p.title)}`;
-    b.addEventListener('click',()=>fireNotify(p, b));
+    b.addEventListener('click',()=>{
+      $('notifyApp').value=p.app; $('notifyTitle').value=p.title; $('notifyText').value=p.text;
+      wrap.querySelectorAll('.notify-chip').forEach(c=>c.classList.toggle('active', c===b));
+      updateNotifyPreview();
+    });
     wrap.appendChild(b);
   });
   $('notifyApp').innerHTML=Object.entries(NOTIFY_APPS).map(([k,a])=>`<option value="${k}">${escapeHtml(a.glyph+' '+a.name)}</option>`).join('');
   const prefs=appStorageGet('notifyPrefs',{ dark:false, sound:true, seconds:6 });
   $('notifyDark').checked=!!prefs.dark;
   $('notifySound').checked=prefs.sound!==false;
-}
-async function fireNotify(n, btn){
-  if(btn) btn.disabled=true;
-  try{ await sendFakeNotification(n); notify('Notification sent','ok'); }
-  catch(e){ notify(e.message,'err'); }
-  if(btn) btn.disabled=false;
+  const first=NOTIFY_PRESETS[0];
+  $('notifyApp').value=first.app; $('notifyTitle').value=first.title; $('notifyText').value=first.text;
+  wrap.firstChild.classList.add('active');
+  requestAnimationFrame(updateNotifyPreview);
 }
 function saveNotifyPrefs(){ appStorageSet('notifyPrefs',{ ...appStorageGet('notifyPrefs',{ seconds:6 }), dark:$('notifyDark').checked, sound:$('notifySound').checked }); }
-$('notifyDark').addEventListener('change', saveNotifyPrefs);
+$('notifyDark').addEventListener('change',()=>{ saveNotifyPrefs(); updateNotifyPreview(); });
 $('notifySound').addEventListener('change', saveNotifyPrefs);
-$('notifySendBtn').addEventListener('click',()=>{
-  const title=$('notifyTitle').value.trim(), text=$('notifyText').value.trim();
-  if(!title && !text){ notify('Type who it\'s from and a message','err'); return; }
-  fireNotify({ app:$('notifyApp').value, title:title||NOTIFY_APPS[$('notifyApp').value].name, text }, $('notifySendBtn'));
+['notifyApp','notifyTitle','notifyText'].forEach(id=>$(id).addEventListener('input',()=>{
+  document.querySelectorAll('.notify-chip.active').forEach(c=>c.classList.remove('active'));
+  updateNotifyPreview();
+}));
+$('notifySendBtn').addEventListener('click',async()=>{
+  const n=currentNotify();
+  if(!n.text){ notify('Type a message first','err'); return; }
+  const btn=$('notifySendBtn');
+  btn.disabled=true;
+  try{ await sendFakeNotification(n); notify('Notification sent','ok'); }
+  catch(e){ notify(e.message,'err'); }
+  btn.disabled=false;
 });
 $('notifyText').addEventListener('keydown',e=>{ if(e.key==='Enter') $('notifySendBtn').click(); });

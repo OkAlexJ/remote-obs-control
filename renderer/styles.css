@@ -430,3 +430,9 @@ body.compact .topbar{padding:6px 10px;}
 .tts-row{flex-wrap:nowrap;gap:6px;margin-top:6px;align-items:center;}
 .tts-row select{flex:1;min-width:0;width:auto;padding:6px 8px;}
 .tts-row input[type=range]{flex:1;}
+.notify-preview{margin:10px 0 8px;padding:10px;border-radius:12px;background:linear-gradient(135deg,#3d4f6b,#6b3d5a);display:flex;justify-content:center;}
+.notify-fields{display:flex;gap:6px;margin-bottom:6px;}
+.notify-fields select{flex:0 0 42%;min-width:0;width:auto;}
+.notify-fields input{flex:1;min-width:0;width:auto;}
+.notify-chip.active{border-color:var(--accent);background:var(--accent-soft);}
+.notify-opts{align-items:center;}
