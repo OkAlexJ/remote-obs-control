@@ -696,7 +696,7 @@ function syncAddFields(){
   const v=$('addType').value;
   const show=(id,on)=>$(id).classList.toggle('hidden',!on);
   show('addExisting', v==='existing');
-  show('addName', v!=='existing');
+  show('addName', v!=='existing' && v!=='bald_filter');
   show('addUrl', v==='browser_source');
   show('addFile', v==='image_source');
   show('addText', v==='text_source');
@@ -726,6 +726,13 @@ $('addBtn').addEventListener('click', async ()=>{
   const fail=m=>showBoxErr('addErr',m);
   if(!editingScene) return fail('Load a scene first.');
   const kind=$('addType').value;
+
+  if(kind==='bald_filter'){
+    $('addBtn').disabled=true;
+    try{ await addBaldFilter(); }catch(e){ fail(e.message); }
+    $('addBtn').disabled=false;
+    return;
+  }
 
   if(kind==='existing'){
     const src=$('addExisting').value;

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bald filter</title>
+<!--
+  Realistic bald filter for an OBS Browser Source.
+  - Finds hair with MediaPipe's hair segmenter and the head with the face landmarker
+  - Paints the background back in where hair was (pull-push inpainting)
+  - Draws a shaded scalp in the person's own skin tone that follows head position and tilt
+  Options go in the URL hash as JSON, e.g.  bald-filter.html#{"camera":"Logitech","shine":0.6}
+    camera   part of the webcam's name to use (default: first camera)
+    strength 0..1, how strongly the effect is applied (default 1)
+    shine    0..1, scalp highlight (default 0.5)
+    size     0.8..1.3, scalp size multiplier (default 1)
+    test     URL of a photo to use instead of a webcam (for trying it out)
+    debug    true to draw the detected hair mask and head outline
+-->
+<style>
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden;}
+  #out{width:100%;height:100%;object-fit:contain;display:block;}
+  #msg{position:fixed;left:16px;top:16px;max-width:720px;font:600 20px/1.45 "Segoe UI",system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.72);padding:12px 16px;border-radius:10px;}
+  #msg:empty{display:none;}
+</style>
+</head>
+<body>
+<canvas id="out"></canvas>
+<div id="msg">Loading bald filter…</div>
+<script type="module">
+const VERSION='1.0.1';
+const BASE=`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VERSION}`;
+const HAIR_MODEL='https://storage.googleapis.com/mediapipe-models/image_segmenter/hair_segmenter/float32/latest/hair_segmenter.tflite';
+const FACE_MODEL='https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+
+const msg=t=>{ document.getElementById('msg').textContent=t||''; };
+const opts=Object.assign({ camera:'', strength:1, shine:0.5, size:1, test:'', debug:false }, (()=>{
+  try{ return JSON.parse(decodeURIComponent(location.hash.slice(1))||'{}'); }catch(e){ return {}; }
+})());
+
+// Ordered outline of the face (standard MediaPipe face-oval landmark loop)
+const FACE_OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+const SKIN_SAMPLES=[151,9,108,337,50,280,117,346,6];
+const L={ top:10, chin:152, left:234, right:454, browL:105, browR:334 };
+
+const canvas=(w,h)=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; };
+// Only canvases we read pixels back from get willReadFrequently (it forces slow software rendering)
+const ctx2d=(c,read)=>c.getContext('2d', read?{ willReadFrequently:true }:undefined);
+
+let source, srcW, srcH;
+let WW, WH, K;                    // masks/scalp are worked out at a smaller size (they are soft anyway)           // webcam <video> or test <img>
+let OW, OH;                       // output size
+let proc, procCtx, PW, PH;        // small frame the models look at
+let out, outCtx, hole, holeCtx, keep, keepCtx, scalp, scalpCtx, tmp, tmpCtx, maskC, maskCtx;
+let pyramid=[];
+let hairSmooth=null;              // temporally smoothed hair confidence
+let head=null;                    // smoothed head geometry
+let skin=null;                    // smoothed skin colour [r,g,b]
+let missedFrames=0;
+
+async function openSource(){
+  if(opts.test){
+    const img=new Image();
+    img.crossOrigin='anonymous';
+    img.src=opts.test;
+    await img.decode();
+    source=img; srcW=img.naturalWidth; srcH=img.naturalHeight;
+    return;
+  }
+  if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    throw new Error('This page can only use the webcam when loaded from an https:// address, and OBS must be started with --enable-media-stream.');
+  }
+  let stream;
+  try{ stream=await navigator.mediaDevices.getUserMedia({ video:{ width:{ideal:1280}, height:{ideal:720} }, audio:false }); }
+  catch(e){ throw cameraError(e); }
+  if(opts.camera){
+    const devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+    const want=devices.find(d=>d.label.toLowerCase().includes(String(opts.camera).toLowerCase()));
+    const current=stream.getVideoTracks()[0].getSettings().deviceId;
+    if(want && want.deviceId!==current){
+      stream.getTracks().forEach(t=>t.stop());
+      try{ stream=await navigator.mediaDevices.getUserMedia({ video:{ deviceId:{exact:want.deviceId}, width:{ideal:1280}, height:{ideal:720} }, audio:false }); }
+      catch(e){ throw cameraError(e); }
+    }
+  }
+  const v=document.createElement('video');
+  v.muted=true; v.playsInline=true; v.srcObject=stream;
+  await v.play();
+  source=v; srcW=v.videoWidth; srcH=v.videoHeight;
+}
+function cameraError(e){
+  if(e && (e.name==='NotReadableError' || e.name==='TrackStartError'))
+    return new Error('The webcam is busy (probably your normal webcam source in OBS). Hide that source and turn on its "Deactivate when not showing" option.');
+  if(e && e.name==='NotAllowedError')
+    return new Error('Camera access was blocked. Start OBS with the --enable-media-stream launch option.');
+  if(e && e.name==='NotFoundError') return new Error('No webcam found on this PC.');
+  return new Error('Could not open the webcam: '+(e && e.message || e));
+}
+
+function setupCanvases(){
+  const scale=Math.min(1, 1280/srcW);
+  OW=Math.round(srcW*scale); OH=Math.round(srcH*scale);
+  PW=Math.min(512, OW); PH=Math.round(OH*PW/OW);
+  WW=Math.min(OW,640); WH=Math.round(OH*WW/OW); K=WW/OW;
+  out=document.getElementById('out'); out.width=OW; out.height=OH; outCtx=ctx2d(out);
+  proc=canvas(PW,PH); procCtx=ctx2d(proc,true);
+  [hole,keep,scalp,tmp]=[canvas(WW,WH),canvas(WW,WH),canvas(WW,WH),canvas(WW,WH)];
+  [holeCtx,keepCtx,scalpCtx,tmpCtx]=[hole,keep,scalp,tmp].map(c=>ctx2d(c));
+  // draw in output coordinates; the transform shrinks it to work size
+  [holeCtx,keepCtx,scalpCtx,tmpCtx].forEach(x=>x.setTransform(K,0,0,K,0,0));
+  maskC=canvas(PW,PH); maskCtx=ctx2d(maskC,true);
+  // Pull-push pyramid for filling in background where hair was removed
+  pyramid=[];
+  let w=Math.round(OW/4), h=Math.round(OH/4);
+  while(w>=4 && h>=4){ const c=canvas(w,h); pyramid.push({ c, x:ctx2d(c), w, h }); w=Math.round(w/2); h=Math.round(h/2); }
+}
+
+// ---- Geometry helpers ----
+const sub=(a,b)=>({x:a.x-b.x,y:a.y-b.y});
+const add=(a,b)=>({x:a.x+b.x,y:a.y+b.y});
+const mul=(a,k)=>({x:a.x*k,y:a.y*k});
+const dot=(a,b)=>a.x*b.x+a.y*b.y;
+const len=a=>Math.hypot(a.x,a.y);
+const norm=a=>mul(a,1/(len(a)||1));
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+function measureHead(lm){
+  const P=i=>({ x:lm[i].x*OW, y:lm[i].y*OH });
+  const top=P(L.top), chin=P(L.chin), left=P(L.left), right=P(L.right);
+  const up=norm(sub(top,chin));
+  const faceH=len(sub(top,chin)), faceW=len(sub(right,left));
+  const mid=mul(add(left,right),0.5);
+  const s=Number(opts.size)||1;
+  const ry=0.52*faceH*s, rx=0.6*faceW*s;
+  // Centre sits on the head's vertical axis, a little below the forehead landmark's level
+  const center=add(mid, mul(up, dot(sub(top,mid),up)-0.1*faceH));
+  const brow=Math.max(dot(sub(P(L.browL),mid),up), dot(sub(P(L.browR),mid),up));
+  return { cx:center.x, cy:center.y, rx, ry, angle:Math.atan2(up.x,-up.y), upx:up.x, upy:up.y, midx:mid.x, midy:mid.y, faceH, faceW, brow,
+           oval:FACE_OVAL.map(P) };
+}
+// Smooth frame-to-frame jitter
+function smoothHead(n){
+  if(!head) return n;
+  const k=0.45;
+  const o={ ...n };
+  ['cx','cy','rx','ry','upx','upy','midx','midy','faceH','faceW','brow'].forEach(f=>{ o[f]=lerp(head[f], n[f], k); });
+  o.angle=Math.atan2(o.upx,-o.upy);
+  o.oval=n.oval.map((p,i)=>({ x:lerp(head.oval[i].x,p.x,0.6), y:lerp(head.oval[i].y,p.y,0.6) }));
+  return o;
+}
+
+function sampleSkin(lm, hairConf){
+  const data=procCtx.getImageData(0,0,PW,PH).data;
+  let r=0,g=0,b=0,n=0;
+  SKIN_SAMPLES.forEach(i=>{
+    const px=Math.round(lm[i].x*PW), py=Math.round(lm[i].y*PH);
+    for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
+      const x=px+dx, y=py+dy;
+      if(x<0||y<0||x>=PW||y>=PH) continue;
+      if(hairConf && hairConf[y*PW+x]>0.3) continue; // skip bangs etc.
+      const o=(y*PW+x)*4;
+      r+=data[o]; g+=data[o+1]; b+=data[o+2]; n++;
+    }
+  });
+  if(!n) return skin;
+  const c=[r/n,g/n,b/n];
+  if(!skin) return c;
+  return skin.map((v,i)=>lerp(v,c[i],0.15));
+}
+
+// Copy a strip of forehead skin (in head space) into `patch`, to texture the scalp with real skin.
+// Returns false when the forehead is covered by hair (bangs), so we fall back to a flat skin colour.
+const patch=canvas(96,48), patchCtx=ctx2d(patch);
+function grabForehead(h){
+  const up={x:h.upx,y:h.upy}, right={x:-h.upy,y:h.upx};
+  const w=h.faceW*0.5, vBottom=h.brow+0.1*h.faceH, vTop=h.brow+0.28*h.faceH;
+  const mid={x:h.midx,y:h.midy};
+  // hair check on a few points of the strip
+  let hairy=0, n=0;
+  for(let i=-2;i<=2;i++) for(const v of [vBottom,(vBottom+vTop)/2,vTop]){
+    const p=add(add(mid,mul(right,i*w/5)),mul(up,v));
+    const x=Math.round(p.x/OW*PW), y=Math.round(p.y/OH*PH);
+    if(x<0||y<0||x>=PW||y>=PH) continue;
+    n++; if(hairSmooth[y*PW+x]>0.35) hairy++;
+  }
+  if(!n || hairy/n>0.2) return false;
+  // patch pixel (px,py) -> image: O + px*a + py*b
+  const a=mul(right,w/patch.width), b=mul(up,-(vTop-vBottom)/patch.height);
+  const O=add(add(mid,mul(right,-w/2)),mul(up,vTop));
+  const det=a.x*b.y-a.y*b.x;
+  // inverse affine (image -> patch)
+  const ia=b.y/det, ib=-a.y/det, ic=-b.x/det, id=a.x/det;
+  patchCtx.setTransform(ia,ib,ic,id, -(ia*O.x+ic*O.y), -(ib*O.x+id*O.y));
+  patchCtx.drawImage(source,0,0,OW,OH);
+  patchCtx.setTransform(1,0,0,1,0,0);
+  return true;
+}
+
+const rgb=(c,k=1,a=1)=>`rgba(${Math.min(255,Math.round(c[0]*k))},${Math.min(255,Math.round(c[1]*k))},${Math.min(255,Math.round(c[2]*k))},${a})`;
+
+// Draws a half-plane in head space: everything on the "up" side of a line `offset` above the cheek line
+function headHalfPlane(c, h, offset){
+  const up={x:h.upx,y:h.upy}, right={x:-h.upy,y:h.upx};
+  const o=add({x:h.midx,y:h.midy}, mul(up,offset));
+  const far=Math.max(OW,OH)*3;
+  const a=add(o,mul(right,-far)), b=add(o,mul(right,far));
+  c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y);
+  c.lineTo(b.x+up.x*far,b.y+up.y*far); c.lineTo(a.x+up.x*far,a.y+up.y*far); c.closePath(); c.fill();
+}
+function facePath(c, h){ c.beginPath(); h.oval.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y)); c.closePath(); }
+
+// ---- Frame ----
+let faceLM, hairSeg, lastTs=-1;
+function render(){
+  const ts=performance.now();
+  if(ts<=lastTs){ requestAnimationFrame(render); return; }
+  lastTs=ts;
+  if(source.readyState!==undefined && source.readyState<2){ requestAnimationFrame(render); return; }
+  procCtx.drawImage(source,0,0,PW,PH);
+
+  // 1. Hair mask (smoothed over time)
+  const seg=hairSeg.segmentForVideo(proc, ts);
+  const masks=seg.confidenceMasks||[];
+  const hairMask=masks[masks.length>1?1:0];
+  const conf=hairMask ? hairMask.getAsFloat32Array() : null;
+  if(conf){
+    if(!hairSmooth || hairSmooth.length!==conf.length) hairSmooth=Float32Array.from(conf);
+    else for(let i=0;i<conf.length;i++) hairSmooth[i]=hairSmooth[i]*0.4+conf[i]*0.6;
+  }
+  seg.close && seg.close();
+
+  // 2. Head
+  const faces=faceLM.detectForVideo(proc, ts).faceLandmarks||[];
+  if(faces.length){
+    head=smoothHead(measureHead(faces[0]));
+    skin=sampleSkin(faces[0], hairSmooth);
+    missedFrames=0;
+  } else if(++missedFrames>10) head=null;
+
+  outCtx.globalAlpha=1;
+  outCtx.drawImage(source,0,0,OW,OH);
+  if(!head || !skin || !hairSmooth){ requestAnimationFrame(render); return; }
+  const h=head, strength=Math.max(0,Math.min(1,Number(opts.strength)));
+  const feather=Math.max(1.5, h.faceW*0.02*K);
+
+  // Hair mask -> canvas (alpha = hair confidence, sharpened)
+  const img=maskCtx.createImageData(PW,PH);
+  for(let i=0;i<hairSmooth.length;i++){
+    const a=Math.max(0,Math.min(1,(hairSmooth[i]-0.25)/0.35));
+    img.data[i*4+3]=a*255;
+  }
+  maskCtx.putImageData(img,0,0);
+
+  // 3. "Keep" = the face itself, minus any hair on the forehead (bangs), but never eyebrows/beard
+  keepCtx.clearRect(0,0,OW,OH);
+  keepCtx.globalCompositeOperation='source-over';
+  keepCtx.filter=`blur(${feather}px)`;
+  keepCtx.fillStyle='#000';
+  facePath(keepCtx,h); keepCtx.fill();
+  keepCtx.filter='none';
+  // hair above the brows (in head space) is not part of the face we keep
+  tmpCtx.clearRect(0,0,OW,OH);
+  tmpCtx.globalCompositeOperation='source-over';
+  tmpCtx.drawImage(maskC,0,0,OW,OH);
+  tmpCtx.globalCompositeOperation='destination-in';
+  tmpCtx.fillStyle='#000';
+  headHalfPlane(tmpCtx,h,h.brow+0.06*h.faceH);
+  tmpCtx.globalCompositeOperation='source-over';
+  keepCtx.globalCompositeOperation='destination-out';
+  keepCtx.drawImage(tmp,0,0,OW,OH);
+  keepCtx.globalCompositeOperation='source-over';
+
+  // 4. Hole = hair (grown a little so no strands are left at the edges) minus the kept face
+  holeCtx.clearRect(0,0,OW,OH);
+  holeCtx.filter=`blur(${feather*1.5}px)`;
+  holeCtx.drawImage(maskC,0,0,OW,OH);
+  holeCtx.drawImage(maskC,0,0,OW,OH);
+  holeCtx.filter='none';
+  holeCtx.globalCompositeOperation='destination-out';
+  holeCtx.drawImage(keep,0,0,OW,OH);
+  holeCtx.globalCompositeOperation='source-over';
+
+  // 5. Fill the hole with surrounding background (pull-push)
+  const L0=pyramid[0];
+  L0.x.globalCompositeOperation='copy';
+  L0.x.drawImage(source,0,0,L0.w,L0.h);
+  L0.x.globalCompositeOperation='destination-out';
+  L0.x.drawImage(hole,0,0,L0.w,L0.h);
+  L0.x.drawImage(hole,0,0,L0.w,L0.h);
+  for(let i=1;i<pyramid.length;i++){
+    const p=pyramid[i];
+    p.x.globalCompositeOperation='copy';
+    p.x.imageSmoothingQuality='high';
+    p.x.drawImage(pyramid[i-1].c,0,0,p.w,p.h);
+  }
+  for(let i=pyramid.length-2;i>=0;i--){
+    const p=pyramid[i];
+    p.x.globalCompositeOperation='destination-over';
+    p.x.filter='blur(1px)';
+    p.x.drawImage(pyramid[i+1].c,0,0,p.w,p.h);
+    p.x.filter='none';
+  }
+  tmpCtx.clearRect(0,0,OW,OH);
+  tmpCtx.globalCompositeOperation='source-over';
+  tmpCtx.imageSmoothingQuality='high';
+  tmpCtx.drawImage(L0.c,0,0,OW,OH);
+  tmpCtx.globalCompositeOperation='destination-in';
+  tmpCtx.drawImage(hole,0,0,OW,OH);
+  tmpCtx.globalCompositeOperation='source-over';
+  outCtx.globalAlpha=strength;
+  outCtx.drawImage(tmp,0,0,OW,OH);
+
+  // 6. Scalp: a dome textured with the person's own forehead skin, shaded, above the ears, not over the face
+  scalpCtx.clearRect(0,0,OW,OH);
+  scalpCtx.globalCompositeOperation='source-over';
+  const useSkinTexture=grabForehead(h);
+  scalpCtx.save();
+  scalpCtx.translate(h.cx,h.cy);
+  scalpCtx.rotate(h.angle);
+  scalpCtx.scale(h.rx,h.ry);
+  scalpCtx.beginPath(); scalpCtx.arc(0,0,1,0,Math.PI*2);
+  if(useSkinTexture){
+    scalpCtx.save(); scalpCtx.clip();
+    scalpCtx.filter='blur(0.6px)';
+    // forehead patch stretched over the whole dome
+    scalpCtx.drawImage(patch,-1.05,-1.05,2.1,2.1);
+    scalpCtx.filter='none';
+    scalpCtx.restore();
+  } else {
+    scalpCtx.fillStyle=rgb(skin); scalpCtx.fill();
+  }
+  const shine=Math.max(0,Math.min(1,Number(opts.shine)));
+  scalpCtx.globalCompositeOperation='source-atop';
+  // roundness: darker towards the edges, like a real skull curving away
+  const g=scalpCtx.createRadialGradient(-0.1,-0.35,0.1, 0,-0.05,1.05);
+  g.addColorStop(0,'rgba(0,0,0,0)');
+  g.addColorStop(0.55,'rgba(0,0,0,0.04)');
+  g.addColorStop(0.85,'rgba(0,0,0,0.2)');
+  g.addColorStop(1,'rgba(0,0,0,0.42)');
+  scalpCtx.fillStyle=g; scalpCtx.fillRect(-1.2,-1.2,2.4,2.4);
+  // soft highlight on top
+  const s=scalpCtx.createRadialGradient(-0.18,-0.6,0,-0.18,-0.6,0.5);
+  s.addColorStop(0,`rgba(255,255,255,${0.32*shine})`);
+  s.addColorStop(1,'rgba(255,255,255,0)');
+  scalpCtx.fillStyle=s; scalpCtx.fillRect(-1.2,-1.2,2.4,2.4);
+  scalpCtx.restore();
+  scalpCtx.globalCompositeOperation='source-over';
+  // fine skin grain so it doesn't look like flat paint
+  if(!render.noise){
+    const n=canvas(128,128), nx=ctx2d(n), id=nx.createImageData(128,128);
+    for(let i=0;i<id.data.length;i+=4){ const v=128+(Math.random()-0.5)*40; id.data[i]=id.data[i+1]=id.data[i+2]=v; id.data[i+3]=18; }
+    nx.putImageData(id,0,0); render.noise=n;
+  }
+  scalpCtx.globalCompositeOperation='source-atop';
+  scalpCtx.fillStyle=scalpCtx.createPattern(render.noise,'repeat');
+  scalpCtx.fillRect(0,0,OW,OH);
+  // cut away: below the ear line, and the visible face
+  scalpCtx.globalCompositeOperation='destination-in';
+  scalpCtx.filter=`blur(${feather}px)`;
+  scalpCtx.fillStyle='#000';
+  headHalfPlane(scalpCtx,h,0.02*h.faceH);
+  scalpCtx.filter='none';
+  scalpCtx.globalCompositeOperation='destination-out';
+  scalpCtx.drawImage(keep,0,0,OW,OH);
+  scalpCtx.globalCompositeOperation='source-over';
+  // soften the outer silhouette slightly
+  tmpCtx.clearRect(0,0,OW,OH);
+  tmpCtx.filter=`blur(${Math.max(0.6,1.2*K)}px)`;
+  tmpCtx.drawImage(scalp,0,0,OW,OH);
+  tmpCtx.filter='none';
+  outCtx.globalAlpha=strength;
+  outCtx.drawImage(tmp,0,0,OW,OH);
+  outCtx.globalAlpha=1;
+
+  if(opts.debug){
+    outCtx.globalAlpha=0.5; outCtx.drawImage(hole,0,0,OW,OH); outCtx.globalAlpha=1;
+    outCtx.strokeStyle='#0f0'; outCtx.lineWidth=2; facePath(outCtx,h); outCtx.stroke();
+    outCtx.save(); outCtx.translate(h.cx,h.cy); outCtx.rotate(h.angle); outCtx.strokeStyle='#f0f';
+    outCtx.beginPath(); outCtx.ellipse(0,0,h.rx,h.ry,0,0,Math.PI*2); outCtx.stroke(); outCtx.restore();
+  }
+  window.__frames=(window.__frames||0)+1;
+  requestAnimationFrame(render);
+}
+
+(async()=>{
+  try{
+    msg('Loading bald filter…');
+    const { FilesetResolver, FaceLandmarker, ImageSegmenter }=await import(`${BASE}/vision_bundle.mjs`);
+    const vision=await FilesetResolver.forVisionTasks(`${BASE}/wasm`);
+    const make=async(delegate)=>Promise.all([
+      FaceLandmarker.createFromOptions(vision,{ baseOptions:{ modelAssetPath:FACE_MODEL, delegate }, runningMode:'VIDEO', numFaces:1 }),
+      ImageSegmenter.createFromOptions(vision,{ baseOptions:{ modelAssetPath:HAIR_MODEL, delegate }, runningMode:'VIDEO', outputConfidenceMasks:true, outputCategoryMask:false })
+    ]);
+    try{ [faceLM, hairSeg]=await make('GPU'); }
+    catch(e){ [faceLM, hairSeg]=await make('CPU'); } // older GPUs / no WebGL2
+    msg('Starting camera…');
+    await openSource();
+    setupCanvases();
+    msg('');
+    window.__ready=true;
+    requestAnimationFrame(render);
+  } catch(e){
+    console.error(e);
+    msg('Bald filter: '+e.message);
+    window.__error=e.message;
+  }
+})();
+</script>
+</body>
+</html>
