@@ -33,6 +33,10 @@ contextBridge.exposeInMainWorld('desktop', {
     localUrl: () => ipcRenderer.invoke('filters:localUrl'),
     tailnetUrl: () => ipcRenderer.invoke('filters:tailnetUrl')
   },
+  tts: {
+    voices: () => ipcRenderer.invoke('tts:voices'),
+    speak: (opts) => ipcRenderer.invoke('tts:speak', opts)
+  },
   files: {
     saveImage: (dataUrl, name) => ipcRenderer.invoke('file:saveImage', dataUrl, name)
   },

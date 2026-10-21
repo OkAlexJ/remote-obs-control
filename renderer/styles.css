@@ -427,3 +427,6 @@ body.compact .topbar{padding:6px 10px;}
 .notify-chip span{font-size:14px;}
 .notify-opts{gap:14px;margin-top:8px;}
 .notify-opts .checkbox-row{margin:0;}
+.tts-row{flex-wrap:nowrap;gap:6px;margin-top:6px;align-items:center;}
+.tts-row select{flex:1;min-width:0;width:auto;padding:6px 8px;}
+.tts-row input[type=range]{flex:1;}

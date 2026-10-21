@@ -9,6 +9,7 @@ const PANELS=[
   { id:'graph',      name:'Audio graph',             desc:'Levels over time' },
   { id:'soundboard', name:'Soundboard',              desc:'Play sounds through OBS' },
   { id:'macros',     name:'Macros',                  desc:'Many actions with one click' },
+  { id:'tts',        name:'Text to speech',          desc:'Say anything on stream, incl. ASMR whisper' },
   { id:'pranks',     name:'Fake notifications',      desc:'iPhone-style pop-ups on their stream' },
   { id:'twitch',     name:'Twitch',                  desc:'Watch, chat, viewer count' },
   { id:'log',        name:'Activity log',            desc:'History of what happened' }
@@ -59,7 +60,7 @@ function applyLayout(){
   // Containers disappear when everything in them is hidden, so the rest can use the space
   const allOff=ids=>ids.every(id=>l.hidden.includes(id));
   document.querySelector('.main-col').classList.toggle('panel-off', allOff(['editor','graph']));
-  document.querySelector('.sidebar').classList.toggle('panel-off', allOff(['sources','mixer','pranks','twitch']));
+  document.querySelector('.sidebar').classList.toggle('panel-off', allOff(['sources','mixer','tts','pranks','twitch']));
   document.querySelector('.bottom-grid').classList.toggle('panel-off', allOff(['soundboard','macros']));
   $('outputsPanel').classList.toggle('stats-only', l.hidden.includes('outputs'));
   $('outputsPanel').classList.toggle('panel-off', allOff(['outputs','stats']));

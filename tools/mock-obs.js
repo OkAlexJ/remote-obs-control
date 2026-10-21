@@ -212,6 +212,8 @@ function handle(type, d, client) {
       i.muted = type === 'ToggleInputMute' ? !i.muted : !!d.inputMuted;
       broadcast('InputMuteStateChanged', { inputName: d.inputName, inputMuted: i.muted }, 1 << 3); return ok({ inputMuted: i.muted });
     }
+    case 'SetInputAudioMonitorType': { const i = state.inputs[d.inputName]; if (!i) return fail(600, 'No input'); i.monitorType = d.monitorType; return ok(); }
+    case 'GetInputAudioMonitorType': { const i = state.inputs[d.inputName]; return i ? ok({ monitorType: i.monitorType || 'OBS_MONITORING_TYPE_NONE' }) : fail(600, 'No input'); }
     case 'GetSourceFilterList': return ok({ filters: (filters[d.sourceName] || []).map((f, i) => ({ ...f, filterIndex: i, filterSettings: {} })) });
     case 'SetSourceFilterEnabled': {
       const f = (filters[d.sourceName] || []).find(x => x.filterName === d.filterName); if (!f) return fail(600, 'No filter');

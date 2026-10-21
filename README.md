@@ -82,6 +82,12 @@ npm run build:win-portable   # single portable .exe
 - 10 one-click presets (Mom, card declined, Screen Time, AirTag…) or write your own sender + message; also a macro step.
 - Uses one "Fake Notification" browser source, created on top of the live scene the first time.
 
+**🗣️ Text to speech**
+- Type anything and it's said on stream with Windows' built-in voices (David, Zira). 🎧 previews it just for you first.
+- **ASMR whisper** style: breathy close-mic whisper, slower, warm, drifting ear to ear, with a little room.
+- Plays through a hidden "Text to Speech" source set to *Monitor and Output*, so it's on the stream **and** the streamer hears it through OBS monitoring.
+- Also a macro step.
+
 **Everywhere**
 - **Ctrl+K** command palette (scenes, sources, mutes, sounds, macros, stream/record actions…).
 - **Ctrl+P** profile switcher, **Ctrl+,** settings, **Ctrl+Shift+T** next theme, **Ctrl+T** keep on top, **?** help.

@@ -19,6 +19,7 @@ const MACRO_STEPS={
   setText:      { label:'Change text source',          fields:[{k:'inputName',kind:'source',ph:'Text source'},{k:'text',kind:'text',ph:'New text'}] },
   playSound:    { label:'Play soundboard button',      fields:[{k:'buttonId',kind:'sound'}] },
   stopSounds:   { label:'Stop all sounds',             fields:[] },
+  tts:          { label:'Say (text to speech)',        fields:[{k:'text',kind:'text',ph:'What to say'},{k:'style',kind:'select',options:[['normal','Normal'],['asmr','ASMR whisper']]}] },
   notify:       { label:'Fake iPhone notification',    fields:[{k:'app',kind:'select',options:Object.entries(NOTIFY_APPS).map(([k,a])=>[k,a.glyph+' '+a.name])},{k:'title',kind:'text',ph:'From'},{k:'text',kind:'text',ph:'Message'}] },
   wait:         { label:'Wait',                        fields:[{k:'ms',kind:'number',ph:'Milliseconds',min:0,max:600000}] },
   stream:       { label:'Streaming',                   fields:[{k:'action',kind:'select',options:[['start','Start'],['stop','Stop']]}] },
@@ -40,6 +41,7 @@ function describeStep(s){
     case 'volume': return `Set ${s.inputName||'?'} to ${s.db} dB`;
     case 'setText': return `Set ${s.inputName||'?'} text`;
     case 'playSound': return `Play ${(sbState.buttons[s.buttonId]||{}).name||'(deleted button)'}`;
+    case 'tts': return `Say${s.style==='asmr'?' (ASMR)':''}: ${s.text||''}`;
     case 'notify': return `Notification: ${s.title||''} — ${s.text||''}`;
     case 'wait': return `Wait ${s.ms} ms`;
     case 'stream': case 'record': case 'vcam': return `${def.label}: ${s.action}`;
@@ -78,6 +80,7 @@ async function runStep(s){
     case 'setText': return must('SetInputSettings',{ inputName:s.inputName, inputSettings:{ text:s.text??'' }, overlay:true });
     case 'playSound': return sbPlayButton(s.buttonId);
     case 'stopSounds': return sbStopAll();
+    case 'tts': { const p=appStorageGet('ttsPrefs',{}); return sayOnStream(s.text, s.style, p.voice||'', p.volume); }
     case 'notify': return sendFakeNotification({ app:s.app, title:s.title||'', text:s.text||'' });
     case 'wait': return sleep(Math.max(0,Math.min(600000,Number(s.ms)||0)));
     // Output steps are no-ops when OBS is already in the wanted state, so re-running a macro doesn't fail

@@ -319,6 +319,20 @@
       <div id="audioList" class="scroll-list"><div class="empty-note">Loading…</div></div>
     </section>
 
+    <section class="panel sb-panel" data-panel="tts">
+      <div class="panel-head"><h2>🗣️ Text to speech</h2><div class="ph-tools"><span class="hint" id="ttsCount">0/300</span></div></div>
+      <textarea id="ttsText" maxlength="300" placeholder="Type what it should say… (Enter to send)" style="min-height:54px;"></textarea>
+      <div class="row tts-row">
+        <select id="ttsVoice" title="Voice"></select>
+        <select id="ttsStyle" title="Style"><option value="normal">Normal</option><option value="asmr">ASMR whisper</option></select>
+      </div>
+      <div class="row tts-row">
+        <input type="range" id="ttsVolume" min="0" max="100" title="Volume">
+        <button class="secondary icon" id="ttsPreviewBtn" title="Listen here first (only you hear it)">🎧</button>
+        <button id="ttsSpeakBtn">Say it</button>
+      </div>
+    </section>
+
     <section class="panel sb-panel" data-panel="pranks">
       <div class="panel-head"><h2>📱 Fake notification</h2></div>
       <div class="notify-presets" id="notifyPresets"></div>
@@ -556,6 +570,7 @@
 <script src="js/stage.js"></script>
 <script src="js/effects.js"></script>
 <script src="js/notify.js"></script>
+<script src="js/tts.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/outputs.js"></script>
 <script src="js/soundboard.js"></script>

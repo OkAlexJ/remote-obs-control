@@ -29,7 +29,7 @@ function itemBox(t){
   return { x:t.positionX-ox, y:t.positionY-oy, w, h, ox, oy };
 }
 
-const isSbPlayerName = name => typeof SB_PLAYER_PREFIX!=='undefined' && String(name).startsWith(SB_PLAYER_PREFIX);
+const isSbPlayerName = name => (typeof SB_PLAYER_PREFIX!=='undefined' && String(name).startsWith(SB_PLAYER_PREFIX)) || name==='Text to Speech';
 const visibleItems = () => stageItems.filter(i=>!isSbPlayerName(i.sourceName));
 
 // ---- Loading ----

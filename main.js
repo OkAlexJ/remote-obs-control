@@ -438,6 +438,51 @@ ipcMain.handle('filters:tailnetUrl', async () => {
   return served ? { ok: true, url: `https://${host}/` } : { ok: false, reason: 'not-served', host };
 });
 
+// ==================== Text to speech (Windows voices) ====================
+// Uses the voices built into Windows (System.Speech) to render speech to a WAV file, which the
+// renderer then sends to OBS. Text/voice are passed through environment variables, never pasted
+// into the PowerShell command, so nothing typed can be run as a command.
+const os = require('os');
+function runPowerShell(script, env) {
+  return new Promise((resolve, reject) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+      { env: { ...process.env, ...env }, timeout: 30000, windowsHide: true, maxBuffer: 1024 * 1024 },
+      (err, stdout, stderr) => err ? reject(new Error((stderr || err.message).trim())) : resolve(stdout));
+  });
+}
+ipcMain.handle('tts:voices', async () => {
+  if (process.platform !== 'win32') return [];
+  try {
+    const out = await runPowerShell('Add-Type -AssemblyName System.Speech; $s=New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.GetInstalledVoices() | Where-Object Enabled | ForEach-Object { $_.VoiceInfo.Name + "|" + $_.VoiceInfo.Gender }; $s.Dispose()');
+    return out.split(/\r?\n/).filter(Boolean).map(l => { const [name, gender] = l.split('|'); return { name, gender }; });
+  } catch (e) { return []; }
+});
+ipcMain.handle('tts:speak', async (e, { text, voice, rate }) => {
+  if (process.platform !== 'win32') return { ok: false, error: 'Text to speech currently needs Windows.' };
+  const clean = String(text || '').slice(0, 500).trim();
+  if (!clean) return { ok: false, error: 'Nothing to say.' };
+  const out = path.join(os.tmpdir(), `roc-tts-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.wav`);
+  const script = [
+    'Add-Type -AssemblyName System.Speech',
+    '$s=New-Object System.Speech.Synthesis.SpeechSynthesizer',
+    'if($env:ROC_VOICE){ try{ $s.SelectVoice($env:ROC_VOICE) }catch{} }',
+    '$s.Rate=[int]$env:ROC_RATE',
+    '$fmt=New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(22050,[System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen,[System.Speech.AudioFormat.AudioChannel]::Mono)',
+    '$s.SetOutputToWaveFile($env:ROC_OUT,$fmt)',
+    '$s.Speak($env:ROC_TEXT)',
+    '$s.Dispose()'
+  ].join('; ');
+  try {
+    await runPowerShell(script, { ROC_TEXT: clean, ROC_VOICE: String(voice || ''), ROC_RATE: String(Math.max(-10, Math.min(10, parseInt(rate, 10) || 0))), ROC_OUT: out });
+    const data = fs.readFileSync(out);
+    return { ok: true, dataUrl: 'data:audio/wav;base64,' + data.toString('base64') };
+  } catch (err) {
+    return { ok: false, error: 'Windows speech failed: ' + err.message.slice(0, 200) };
+  } finally {
+    fs.unlink(out, () => {});
+  }
+});
+
 // ==================== Window ====================
 ipcMain.handle('window:setPin', (e, on) => {
   if (!mainWindow) return false;

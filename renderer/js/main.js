@@ -7,6 +7,7 @@ function enterApp(profile){
   initMacrosUI();
   initTwitchUI();
   renderNotifyPanel();
+  initTtsUI();
   renderActivityLog();
   applyLayout();
   setConnectedUI(false);
