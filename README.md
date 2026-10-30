@@ -88,6 +88,11 @@ npm run build:win-portable   # single portable .exe
 - Plays through a hidden "Text to Speech" source set to *Monitor and Output*, so it's on the stream **and** the streamer hears it through OBS monitoring.
 - Also a macro step.
 
+**💬 Troll captions**
+- Type anything and it appears under the streamer as if it were live captions of what they said.
+- Styles: live CC (word-by-word, dark box), movie subtitles, TikTok (big outlined, word pop).
+- 10 presets, live preview, Clear button, and a macro step. Uses one "Captions" source at the bottom of the live scene.
+
 **Everywhere**
 - **Ctrl+K** command palette (scenes, sources, mutes, sounds, macros, stream/record actions…).
 - **Ctrl+P** profile switcher, **Ctrl+,** settings, **Ctrl+Shift+T** next theme, **Ctrl+T** keep on top, **?** help.

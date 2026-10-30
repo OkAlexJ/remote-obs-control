@@ -8,6 +8,7 @@ function enterApp(profile){
   initTwitchUI();
   renderNotifyPanel();
   initTtsUI();
+  renderCaptionPanel();
   renderActivityLog();
   applyLayout();
   setConnectedUI(false);

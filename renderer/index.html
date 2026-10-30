@@ -333,6 +333,18 @@
       </div>
     </section>
 
+    <section class="panel sb-panel" data-panel="captions">
+      <div class="panel-head"><h2>💬 Troll captions</h2></div>
+      <div class="notify-presets" id="captionPresets"></div>
+      <div class="caption-preview" id="captionPreview" title="Preview — this is what shows under them"></div>
+      <textarea id="captionText" maxlength="160" placeholder="What they &quot;said&quot;… (Enter to show)" style="min-height:48px;"></textarea>
+      <div class="row tts-row">
+        <select id="captionStyle" title="Caption style"></select>
+        <button class="secondary icon" id="captionClearBtn" title="Remove the caption now">Clear</button>
+        <button id="captionShowBtn">Show</button>
+      </div>
+    </section>
+
     <section class="panel sb-panel" data-panel="pranks">
       <div class="panel-head"><h2>📱 Fake notification</h2></div>
       <div class="notify-presets" id="notifyPresets"></div>
@@ -571,6 +583,7 @@
 <script src="js/effects.js"></script>
 <script src="js/notify.js"></script>
 <script src="js/tts.js"></script>
+<script src="js/captions.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/outputs.js"></script>
 <script src="js/soundboard.js"></script>
