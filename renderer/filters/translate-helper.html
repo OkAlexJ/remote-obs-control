@@ -26,7 +26,9 @@
   .box{background:#121318;border:1px solid #2c2d36;border-radius:10px;padding:12px 14px;margin-top:10px;min-height:24px;}
   .label{font-size:12px;color:#8a8a96;text-transform:uppercase;letter-spacing:.05em;margin-top:14px;}
   .tip{font-size:13px;color:#8a8a96;margin-top:16px;}
-  #heard{color:#bbb;} #said{font-size:18px;}
+  #heard,#fheard{color:#bbb;} #said{font-size:18px;}
+  button.alt{background:#262833;border:1px solid #3a3c4a;font-size:16px;}
+  .friends{margin-top:22px;padding-top:18px;border-top:1px solid #2c2d36;}
 </style>
 </head>
 <body>
@@ -37,6 +39,13 @@
   <div class="state"><span class="dot" id="dot"></span><span id="state">Not listening</span></div>
   <div class="label">Hearing</div>
   <div class="box" id="heard">—</div>
+  <div class="friends">
+    <button id="fbtn" class="alt">🎧 Also translate my PC sound (Discord friends)</button>
+    <div class="state"><span class="dot" id="fdot"></span><span id="fstate">Off</span></div>
+    <div class="label">Hearing from PC sound</div>
+    <div class="box" id="fheard">—</div>
+    <p class="tip" style="margin-top:8px;">When Chrome asks what to share: pick <b>Entire screen</b> and turn on <b>Also share system audio</b>. Best of all: run Discord in a Chrome tab and share just <b>that tab</b> (tick "Also share tab audio") — then game sound isn't picked up.</p>
+  </div>
   <div class="label">On stream</div>
   <div class="box" id="said">—</div>
   <p class="tip">Keep this tab open — you can minimise the window. To change which mic it uses, click the 🎤 icon in the address bar (or Chrome settings → Privacy → Site settings → Microphone).</p>
@@ -53,14 +62,15 @@ let rec=null, wanted=false, lastSent='';
 
 function setState(t, kind){ $('state').textContent=t; $('dot').className='dot'+(kind?' '+kind:''); }
 
-async function send(text){
+// speaker: 'me' (the streamer's mic) or 'friend' (PC sound / Discord)
+async function send(text, speaker='me'){
   text=text.trim();
-  if(!text || text===lastSent) return;
-  lastSent=text;
+  if(!text || (speaker==='me' && text===lastSent)) return;
+  if(speaker==='me') lastSent=text;
   try{
-    const r=await fetch('/caption',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ text, source:opts.from.toUpperCase(), target:opts.to, token:opts.token }) });
+    const r=await fetch('/caption',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ text, speaker, source:opts.from.toUpperCase(), target:opts.to, token:opts.token }) });
     const j=await r.json();
-    if(j.ok){ $('said').textContent=j.translated; if(j.error) setState('Listening — translation problem: '+j.error,'err'); }
+    if(j.ok){ $('said').textContent=(speaker==='friend'?'🎧 ':'')+j.translated; if(j.error) setState('Listening — translation problem: '+j.error,'err'); }
     else setState(j.error||'The app refused the caption','err');
   }catch(e){ setState('Can\'t reach Remote OBS Control — is the app open on the other PC?','err'); }
 }
@@ -103,6 +113,121 @@ function stop(){
 $('btn').addEventListener('click',()=>wanted?stop():start());
 // If mic permission was already granted earlier, start straight away
 if(navigator.permissions) navigator.permissions.query({ name:'microphone' }).then(p=>{ if(p.state==='granted') start(); }).catch(()=>{});
+</script>
+
+<script type="module">
+// ---------- PC sound (Discord friends): screen/tab audio → Whisper (in this browser) → /caption ----------
+// Browser speech recognition only listens to a microphone, so other people's voices are transcribed
+// with Whisper running right here (uses the graphics card when the browser supports WebGPU).
+const TRANSFORMERS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1/dist/transformers.min.js';
+const LANG={ es:'spanish', en:'english', fr:'french', de:'german', it:'italian', pt:'portuguese', ja:'japanese', ko:'korean', zh:'chinese', ru:'russian' };
+const HALLUCINATIONS=[/subt[ií]tulos/i,/amara\.org/i,/gracias por ver/i,/suscr[ií]bete/i,/thanks? for watching/i,/please subscribe/i,/^\W*$/,/^\[.*\]$/,/^\(.*\)$/,/♪/];
+const SR=16000;
+const $=id=>document.getElementById(id);
+const opts=Object.assign({ from:'es', testFriend:'', gpu:false }, (()=>{ try{ return JSON.parse(decodeURIComponent(location.hash.slice(1))||'{}'); }catch(e){ return {}; } })());
+const fstate=(t,k)=>{ $('fstate').textContent=t; $('fdot').className='dot'+(k?' '+k:''); };
+
+let transcriber=null, ctx=null, stream=null, node=null, running=false;
+const queue=[]; let busy=false;
+
+async function loadModel(){
+  if(transcriber) return;
+  const { pipeline }=await import(TRANSFORMERS);
+  const progress=p=>{ if(p.status==='progress' && p.total) fstate(`Downloading speech model… ${Math.round(p.loaded/p.total*100)}% (first time only)`); };
+  const id='onnx-community/whisper-base';
+  // CPU by default: WebGPU can hang in some browser versions. Add "gpu":true to the link to try it.
+  if(opts.gpu && navigator.gpu){
+    try{ transcriber=await pipeline('automatic-speech-recognition', id, { device:'webgpu', dtype:{ encoder_model:'fp32', decoder_model_merged:'q4' }, progress_callback:progress }); return; }
+    catch(e){ console.warn('WebGPU unavailable, using CPU', e); }
+  }
+  transcriber=await pipeline('automatic-speech-recognition', id, { device:'wasm', dtype:'q8', progress_callback:progress });
+}
+
+async function openSound(){
+  if(opts.testFriend){
+    const el=new Audio(opts.testFriend); el.crossOrigin='anonymous'; await el.play().catch(()=>{});
+    return { src:ctx.createMediaElementSource(el), stop:()=>el.pause() };
+  }
+  // The browser only offers sound together with a screen/tab share; the picture is dropped right away
+  const s=await navigator.mediaDevices.getDisplayMedia({ video:true, audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }, systemAudio:'include', selfBrowserSurface:'exclude' });
+  s.getVideoTracks().forEach(t=>t.stop());
+  if(!s.getAudioTracks().length) throw new Error('No sound was shared — share again and tick "Also share system audio" (or tab audio).');
+  stream=s;
+  s.getAudioTracks()[0].addEventListener('ended',()=>stopFriends());
+  return { src:ctx.createMediaStreamSource(s), stop:()=>s.getTracks().forEach(t=>t.stop()) };
+}
+
+let source=null;
+async function startFriends(){
+  running=true;
+  $('fbtn').textContent='Stop PC sound';
+  try{
+    ctx=new AudioContext({ sampleRate:SR });
+    source=await openSound();            // ask for the share first, while the click still counts
+    fstate('Loading speech model…');
+    await loadModel();
+    if(!running) return;
+    segment(source.src);
+    fstate('Listening to PC sound','on');
+    window.__friendReady=true;
+  }catch(e){
+    console.error(e);
+    fstate(e.name==='NotAllowedError' ? 'Sharing was cancelled.' : e.message,'err');
+    stopFriends(true);
+  }
+}
+function stopFriends(keepMsg){
+  running=false;
+  try{ source && source.stop(); }catch(e){}
+  try{ node && node.disconnect(); }catch(e){}
+  try{ ctx && ctx.close(); }catch(e){}
+  node=null; ctx=null; source=null;
+  $('fbtn').textContent='🎧 Also translate my PC sound (Discord friends)';
+  if(!keepMsg) fstate('Off');
+}
+$('fbtn').addEventListener('click',()=>running?stopFriends():startFriends());
+
+// Same sentence-cutting as the in-OBS version: speech starts when it gets louder than the background,
+// ends after ~0.7 s of quiet (or 9 s, to keep captions flowing)
+function segment(src){
+  node=ctx.createScriptProcessor(2048,1,1);
+  const FRAME=2048/SR;
+  let noise=0.004, inSpeech=false, silent=0, chunks=[], pre=[];
+  node.onaudioprocess=e=>{
+    const x=e.inputBuffer.getChannelData(0);
+    let s=0; for(let i=0;i<x.length;i++) s+=x[i]*x[i];
+    const rms=Math.sqrt(s/x.length), copy=new Float32Array(x);
+    if(!inSpeech) noise=noise*0.97+Math.min(rms,0.05)*0.03;
+    const loud=rms>Math.max(0.012, noise*3);
+    if(!inSpeech){ pre.push(copy); if(pre.length>3) pre.shift(); if(loud){ inSpeech=true; chunks=[...pre]; silent=0; } return; }
+    chunks.push(copy);
+    silent=loud?0:silent+FRAME;
+    const len=chunks.length*FRAME;
+    if(silent>=0.7 || len>=9){
+      inSpeech=false;
+      if(len-silent>=0.5){ const a=new Float32Array(chunks.reduce((n,p)=>n+p.length,0)); let o=0; chunks.forEach(p=>{ a.set(p,o); o+=p.length; }); queue.push(a); pump(); }
+      chunks=[]; pre=[];
+    }
+  };
+  src.connect(node);
+  const mute=ctx.createGain(); mute.gain.value=0; node.connect(mute).connect(ctx.destination);
+}
+async function pump(){
+  if(busy || !queue.length || !transcriber) return;
+  busy=true;
+  const audio=queue.length>2 ? queue.splice(0,queue.length).pop() : queue.shift();  // stay live if behind
+  try{
+    const r=await transcriber(audio, { language:LANG[opts.from]||'spanish', task:'transcribe' });
+    const text=(r.text||'').trim().replace(/\s+/g,' ');
+    if(text && !HALLUCINATIONS.some(rx=>rx.test(text))){
+      $('fheard').textContent=text;
+      window.__friendLast=text;
+      await window.send(text,'friend');
+    }
+  }catch(e){ console.error(e); }
+  busy=false;
+  pump();
+}
 </script>
 </body>
 </html>

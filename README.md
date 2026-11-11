@@ -99,6 +99,7 @@ npm run build:win-portable   # single portable .exe
 - Same requirements as the bald filter: OBS started with `--enable-media-stream`, this app open, and Tailscale Serve for OBS on another PC.
 - Captions appear ~2–4 s after each sentence ends.
 - **No-restart option:** "🔗 Get link for the streamer" gives a private link they open in Chrome/Edge. The browser's own speech recognition listens, finished sentences go to this app (POST /caption, checked against the link's private code), get translated, and appear in OBS through the remote connection. ~1.5–3 s behind, no OBS restart, no model download.
+- **Friends on Discord:** the helper page's "🎧 Also translate my PC sound" shares screen/tab audio and transcribes it with Whisper (CPU) in the browser. Friends' lines are marked 🎧 and tinted; up to two recent lines stay on screen. Sharing just a Discord browser tab avoids picking up game sound.
 
 **Everywhere**
 - **Ctrl+K** command palette (scenes, sources, mutes, sounds, macros, stream/record actions…).

@@ -107,30 +107,45 @@ async function ensureLiveCaptionSource(){
   if(all) await req('SetSceneItemIndex',{ sceneName:scene, sceneItemId:id, sceneItemIndex:all.sceneItems.length-1 });
 }
 
-function liveCaptionHtml({ original, translated, style, showOriginal }){
-  const words=translated.split(/\s+/).length;
-  const hold=Math.max(3.5, Math.min(12, words*0.45));
-  const orig=showOriginal && original!==translated ? `<div class="orig"><span>${escapeHtml(original)}</span></div>` : '';
+// Up to two recent lines on screen (e.g. the streamer, then a friend replying); each fades on its own
+// timer. Friends' lines (PC sound / Discord) get a 🎧 so viewers can tell who's talking.
+const LIVE_MAX_LINES=2;
+let liveLines=[];
+const lineHold=l=>Math.max(3.5, Math.min(12, l.translated.split(/\s+/).length*0.45));
+
+function liveCaptionHtml(lines, style, showOriginal){
+  const now=Date.now();
+  const block=l=>{
+    const left=Math.max(0.3, lineHold(l)-(now-l.at)/1000);
+    const tag=l.speaker==='friend' ? '🎧 ' : '';
+    const orig=showOriginal && l.original!==l.translated ? `<div class="orig"><span>${tag}${escapeHtml(l.original)}</span></div>` : '';
+    return `<div class="blk${l.speaker==='friend'?' friend':''}" style="animation-delay:${left.toFixed(2)}s">${orig}<div class="tr"><span>${tag}${escapeHtml(l.translated)}</span></div></div>`;
+  };
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600&family=Roboto:wght@500&display=swap">
 <style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden;}
-.cap{position:absolute;left:0;right:0;bottom:24px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:0 40px;box-sizing:border-box;animation:out .35s ease ${hold}s forwards;}
+.cap{position:absolute;left:0;right:0;bottom:24px;display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 40px;box-sizing:border-box;}
+.blk{display:flex;flex-direction:column;align-items:center;gap:4px;animation:out .35s ease forwards;}
 .orig,.tr{max-width:100%;text-align:center;}
-.cc .tr{font:500 54px/1.45 Roboto,Inter,"Segoe UI",Arial,sans-serif;color:#fff;}
+.cc .tr{font:500 50px/1.45 Roboto,Inter,"Segoe UI",Arial,sans-serif;color:#fff;}
 .cc .tr span,.cc .orig span{background:rgba(8,8,8,.78);padding:4px 14px;-webkit-box-decoration-break:clone;box-decoration-break:clone;}
-.cc .orig{font:500 34px/1.45 Roboto,Inter,"Segoe UI",Arial,sans-serif;color:#cfcfcf;}
-.movie .tr{font:600 62px/1.25 Inter,"Segoe UI",Arial,sans-serif;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 2px 4px rgba(0,0,0,.9),0 0 12px rgba(0,0,0,.6);}
-.movie .orig{font:600 36px/1.25 Inter,"Segoe UI",Arial,sans-serif;color:#e8e8e8;text-shadow:0 0 2px #000,0 2px 4px rgba(0,0,0,.9);}
-@keyframes out{to{opacity:0;}}</style></head><body>
-<div class="cap ${style==='movie'?'movie':'cc'}">${orig}<div class="tr"><span>${escapeHtml(translated)}</span></div></div></body></html>`;
+.cc .friend .tr span{color:#bfe3ff;}
+.cc .orig{font:500 32px/1.45 Roboto,Inter,"Segoe UI",Arial,sans-serif;color:#cfcfcf;}
+.movie .tr{font:600 58px/1.25 Inter,"Segoe UI",Arial,sans-serif;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 2px 4px rgba(0,0,0,.9),0 0 12px rgba(0,0,0,.6);}
+.movie .friend .tr{color:#ffe98a;}
+.movie .orig{font:600 34px/1.25 Inter,"Segoe UI",Arial,sans-serif;color:#e8e8e8;text-shadow:0 0 2px #000,0 2px 4px rgba(0,0,0,.9);}
+@keyframes out{to{opacity:0;height:0;margin:0;}}</style></head><body>
+<div class="cap ${style==='movie'?'movie':'cc'}">${lines.map(block).join('')}</div></body></html>`;
 }
 
 let liveCaptionChain=Promise.resolve();
 async function pushLiveCaption(c){
   if(!isConnected()) return;
   const p=translatePrefs();
+  const now=Date.now();
+  liveLines=liveLines.filter(l=>now-l.at < lineHold(l)*1000).concat([{ ...c, at:now }]).slice(-LIVE_MAX_LINES);
   await ensureLiveCaptionSource();
-  const html=liveCaptionHtml({ original:c.original, translated:c.translated, style:p.style, showOriginal:p.original });
+  const html=liveCaptionHtml(liveLines, p.style, p.original);
   await req('SetInputSettings',{ inputName:TRANSLATE_SOURCE, inputSettings:{ url:toBase64HtmlUrl(html), width:TRANSLATE_W, height:TRANSLATE_H }, overlay:true });
 }
 if(window.desktop && window.desktop.captions){

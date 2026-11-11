@@ -484,7 +484,7 @@ function handleCaption(req, res) {
       if (t.ok) translated = t.text; else error = t.error;
     }
     if (!mainWindow || mainWindow.isDestroyed()) return reply(503, { ok: false, error: 'The Remote OBS Control window is closed.' });
-    mainWindow.webContents.send('live-caption', { original: text, translated });
+    mainWindow.webContents.send('live-caption', { original: text, translated, speaker: b.speaker === 'friend' ? 'friend' : 'me' });
     reply(200, { ok: true, translated, error });
   });
 }
