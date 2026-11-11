@@ -98,6 +98,7 @@ npm run build:win-portable   # single portable .exe
 - Your DeepL API key is stored encrypted in this app and never sent to the OBS PC: the page asks this app's /translate endpoint, which calls DeepL (capped at 90 requests/minute).
 - Same requirements as the bald filter: OBS started with `--enable-media-stream`, this app open, and Tailscale Serve for OBS on another PC.
 - Captions appear ~2–4 s after each sentence ends.
+- **No-restart option:** "🔗 Get link for the streamer" gives a private link they open in Chrome/Edge. The browser's own speech recognition listens, finished sentences go to this app (POST /caption, checked against the link's private code), get translated, and appear in OBS through the remote connection. ~1.5–3 s behind, no OBS restart, no model download.
 
 **Everywhere**
 - **Ctrl+K** command palette (scenes, sources, mutes, sounds, macros, stream/record actions…).

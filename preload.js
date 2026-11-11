@@ -33,6 +33,10 @@ contextBridge.exposeInMainWorld('desktop', {
     localUrl: () => ipcRenderer.invoke('filters:localUrl'),
     tailnetUrl: () => ipcRenderer.invoke('filters:tailnetUrl')
   },
+  captions: {
+    token: () => ipcRenderer.invoke('caption:token'),
+    onLive: (cb) => ipcRenderer.on('live-caption', (_e, c) => cb(c))
+  },
   deepl: {
     check: (key) => ipcRenderer.invoke('deepl:check', key),
     translate: (text, source, target) => ipcRenderer.invoke('deepl:translate', text, source, target)

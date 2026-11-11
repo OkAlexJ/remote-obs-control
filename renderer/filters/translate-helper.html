@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live translation helper</title>
+<!--
+  Opened by the STREAMER in a normal browser (Chrome or Edge). The browser's built-in speech recognition
+  listens to their mic; each finished sentence is sent to the Remote OBS Control app (POST /caption with
+  the private code from the link), which translates it with DeepL and shows it as captions in OBS.
+  Link hash (JSON): { from:"es", to:"EN-US", token:"…" }
+-->
+<style>
+  :root{color-scheme:dark;}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#111217;color:#eee;font:16px/1.5 "Segoe UI",system-ui,sans-serif;}
+  .card{width:min(560px,92vw);background:#1b1c23;border:1px solid #2c2d36;border-radius:16px;padding:26px 28px;box-shadow:0 20px 50px rgba(0,0,0,.4);}
+  h1{font-size:20px;margin:0 0 4px;}
+  .sub{color:#9a9aa6;margin:0 0 18px;}
+  button{width:100%;font:600 18px "Segoe UI",sans-serif;padding:14px;border:0;border-radius:10px;cursor:pointer;background:#7c5cff;color:#fff;}
+  button.stop{background:#33343f;}
+  .state{display:flex;align-items:center;gap:10px;margin:18px 0 6px;font-weight:600;}
+  .dot{width:12px;height:12px;border-radius:50%;background:#666;}
+  .dot.on{background:#3fbf6f;box-shadow:0 0 10px #3fbf6f;animation:p 1.4s infinite;}
+  .dot.err{background:#ff5c5c;}
+  @keyframes p{50%{opacity:.5;}}
+  .box{background:#121318;border:1px solid #2c2d36;border-radius:10px;padding:12px 14px;margin-top:10px;min-height:24px;}
+  .label{font-size:12px;color:#8a8a96;text-transform:uppercase;letter-spacing:.05em;margin-top:14px;}
+  .tip{font-size:13px;color:#8a8a96;margin-top:16px;}
+  #heard{color:#bbb;} #said{font-size:18px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🌐 Live translation helper</h1>
+  <p class="sub" id="sub">Listening for …</p>
+  <button id="btn">Start translating</button>
+  <div class="state"><span class="dot" id="dot"></span><span id="state">Not listening</span></div>
+  <div class="label">Hearing</div>
+  <div class="box" id="heard">—</div>
+  <div class="label">On stream</div>
+  <div class="box" id="said">—</div>
+  <p class="tip">Keep this tab open — you can minimise the window. To change which mic it uses, click the 🎤 icon in the address bar (or Chrome settings → Privacy → Site settings → Microphone).</p>
+</div>
+<script>
+const LOCALES={ es:'es-MX', en:'en-US', fr:'fr-FR', de:'de-DE', it:'it-IT', pt:'pt-BR', ja:'ja-JP', ko:'ko-KR', zh:'zh-CN', ru:'ru-RU' };
+const NAMES={ es:'Spanish', en:'English', fr:'French', de:'German', it:'Italian', pt:'Portuguese', ja:'Japanese', ko:'Korean', zh:'Chinese', ru:'Russian' };
+const opts=Object.assign({ from:'es', to:'EN-US', token:'' }, (()=>{ try{ return JSON.parse(decodeURIComponent(location.hash.slice(1))||'{}'); }catch(e){ return {}; } })());
+const $=id=>document.getElementById(id);
+$('sub').textContent=`Listening for ${NAMES[opts.from]||opts.from} → captions in ${opts.to.startsWith('EN')?'English':opts.to}`;
+
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null, wanted=false, lastSent='';
+
+function setState(t, kind){ $('state').textContent=t; $('dot').className='dot'+(kind?' '+kind:''); }
+
+async function send(text){
+  text=text.trim();
+  if(!text || text===lastSent) return;
+  lastSent=text;
+  try{
+    const r=await fetch('/caption',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ text, source:opts.from.toUpperCase(), target:opts.to, token:opts.token }) });
+    const j=await r.json();
+    if(j.ok){ $('said').textContent=j.translated; if(j.error) setState('Listening — translation problem: '+j.error,'err'); }
+    else setState(j.error||'The app refused the caption','err');
+  }catch(e){ setState('Can\'t reach Remote OBS Control — is the app open on the other PC?','err'); }
+}
+
+function start(){
+  if(!SR){ setState('This browser has no speech recognition — open this link in Chrome or Edge.','err'); return; }
+  if(!opts.token){ setState('This link is incomplete — get it again from the app.','err'); return; }
+  wanted=true;
+  rec=new SR();
+  rec.lang=LOCALES[opts.from]||opts.from;
+  rec.continuous=true;
+  rec.interimResults=true;
+  rec.onstart=()=>setState('Listening','on');
+  rec.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const r=e.results[i];
+      if(r.isFinal) send(r[0].transcript); else interim+=r[0].transcript;
+    }
+    if(interim) $('heard').textContent=interim;
+    else if(e.results[e.results.length-1].isFinal) $('heard').textContent=e.results[e.results.length-1][0].transcript;
+  };
+  rec.onerror=e=>{
+    if(e.error==='not-allowed' || e.error==='service-not-allowed'){ wanted=false; setState('Microphone blocked — click the 🎤 in the address bar and allow it.','err'); }
+    else if(e.error==='audio-capture'){ wanted=false; setState('No microphone found.','err'); }
+    else if(e.error==='network') setState('Speech service unreachable — retrying…','err');
+    // "no-speech"/"aborted" are normal during quiet moments
+  };
+  // Chrome stops listening after a while of silence (or about a minute) — just start again
+  rec.onend=()=>{ if(wanted) setTimeout(()=>{ try{ rec.start(); }catch(e){} }, 250); else setState('Not listening'); };
+  rec.start();
+  $('btn').textContent='Stop'; $('btn').classList.add('stop');
+}
+function stop(){
+  wanted=false;
+  if(rec) try{ rec.stop(); }catch(e){}
+  $('btn').textContent='Start translating'; $('btn').classList.remove('stop');
+  setState('Not listening');
+}
+$('btn').addEventListener('click',()=>wanted?stop():start());
+// If mic permission was already granted earlier, start straight away
+if(navigator.permissions) navigator.permissions.query({ name:'microphone' }).then(p=>{ if(p.state==='granted') start(); }).catch(()=>{});
+</script>
+</body>
+</html>

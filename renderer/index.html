@@ -331,7 +331,8 @@
         <select id="trModel" title="Speech recognition"><option value="base">Fast</option><option value="small">Accurate (needs a strong PC)</option></select>
       </div>
       <div class="checkbox-row" style="margin-top:8px;"><input type="checkbox" id="trOriginal"><label for="trOriginal">Also show what they said (original)</label></div>
-      <button id="trAddBtn" style="width:100%;">Add to OBS / apply changes</button>
+      <button id="trHelperBtn" style="width:100%;" title="The streamer opens a link in Chrome — no OBS restart needed">🔗 Get link for the streamer (no restart)</button>
+      <button id="trAddBtn" class="secondary" style="width:100%;margin-top:6px;" title="Runs inside OBS — needs OBS started with --enable-media-stream">Or run inside OBS (needs restart flag)</button>
       <details class="add-src">
         <summary>DeepL key &amp; options</summary>
         <div class="row tts-row" style="margin-top:0;">

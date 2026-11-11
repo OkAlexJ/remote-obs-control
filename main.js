@@ -392,12 +392,13 @@ ipcMain.handle('file:saveImage', async (e, dataUrl, suggestedName) => {
 // access on secure pages, and http://localhost counts as secure — so when OBS is on this same PC,
 // the app serves the filters itself on 127.0.0.1 (never reachable from other machines).
 const http = require('http');
-const FILTER_PORT = 47821;
+const FILTER_PORT = Number(process.env.ROC_FILTER_PORT) || 47821; // env override is for testing alongside an installed copy
 let filterServerUrl = null;
 function startFilterServer() {
   const dir = path.join(__dirname, 'renderer', 'filters');
   const server = http.createServer((req, res) => {
     if (req.method === 'POST' && (req.url || '').split('?')[0] === '/translate') return handleTranslate(req, res);
+    if (req.method === 'POST' && (req.url || '').split('?')[0] === '/caption') return handleCaption(req, res);
     const name = decodeURIComponent((req.url || '/').split(/[?#]/)[0]).replace(/^\/+/, '') || 'index.html';
     if (!/^[\w-]+\.html$/.test(name)) { res.writeHead(404); return res.end(); }
     fs.readFile(path.join(dir, name), (err, data) => {
@@ -454,6 +455,40 @@ function handleTranslate(req, res) {
     reply(200, await deeplTranslate(b.text, source, target));
   });
 }
+// ---- Helper-tab captions ----
+// translate-helper.html runs in the streamer's normal browser (Chrome does the speech recognition, so
+// OBS needs no restart). It posts each finished sentence here with the private code from its link;
+// we translate it and hand it to the app window, which puts the caption into OBS.
+function captionToken() {
+  const st = readJson('app-state.json', {});
+  if (!st.captionToken) { st.captionToken = require('crypto').randomBytes(12).toString('hex'); writeJson('app-state.json', st); }
+  return st.captionToken;
+}
+ipcMain.handle('caption:token', () => captionToken());
+function handleCaption(req, res) {
+  const reply = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const now = Date.now();
+  if (now - translateWindow.start > 60000) translateWindow = { start: now, count: 0 };
+  if (++translateWindow.count > 90) return reply(429, { ok: false, error: 'Too many captions this minute' });
+  let raw = '';
+  req.on('data', (c) => { raw += c; if (raw.length > 8192) req.destroy(); });
+  req.on('end', async () => {
+    let b; try { b = JSON.parse(raw); } catch (e) { return reply(400, { ok: false, error: 'bad request' }); }
+    if (!b.token || b.token !== captionToken()) return reply(403, { ok: false, error: 'This helper link is out of date — get a new one from the app.' });
+    const text = String(b.text || '').trim().slice(0, 500);
+    const source = String(b.source || '').toUpperCase(), target = String(b.target || '').toUpperCase();
+    if (!text || !DEEPL_LANGS.test(target) || (source && !DEEPL_LANGS.test(source))) return reply(400, { ok: false, error: 'bad request' });
+    let translated = text, error = null;
+    if (!source || target.slice(0, 2) !== source.slice(0, 2)) {
+      const t = await deeplTranslate(text, source, target);
+      if (t.ok) translated = t.text; else error = t.error;
+    }
+    if (!mainWindow || mainWindow.isDestroyed()) return reply(503, { ok: false, error: 'The Remote OBS Control window is closed.' });
+    mainWindow.webContents.send('live-caption', { original: text, translated });
+    reply(200, { ok: true, translated, error });
+  });
+}
+
 // Settings panel: check a key works and how much of the monthly quota is used
 ipcMain.handle('deepl:check', async (e, key) => {
   const k = key || getSecret(APP_SECRETS, 'deeplKey');
