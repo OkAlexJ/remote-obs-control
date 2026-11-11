@@ -319,6 +319,31 @@
       <div id="audioList" class="scroll-list"><div class="empty-note">Loading…</div></div>
     </section>
 
+    <section class="panel sb-panel" data-panel="translate">
+      <div class="panel-head"><h2>🌐 Live translation</h2></div>
+      <div class="tr-langs">
+        <select id="trFrom" title="Language they speak"></select>
+        <span class="muted">→</span>
+        <select id="trTo" title="Captions language"></select>
+      </div>
+      <div class="row tts-row">
+        <select id="trStyle" title="Caption style"><option value="cc">Live captions</option><option value="movie">Movie subtitles</option></select>
+        <select id="trModel" title="Speech recognition"><option value="base">Fast</option><option value="small">Accurate (needs a strong PC)</option></select>
+      </div>
+      <div class="checkbox-row" style="margin-top:8px;"><input type="checkbox" id="trOriginal"><label for="trOriginal">Also show what they said (original)</label></div>
+      <button id="trAddBtn" style="width:100%;">Add to OBS / apply changes</button>
+      <details class="add-src">
+        <summary>DeepL key &amp; options</summary>
+        <div class="row tts-row" style="margin-top:0;">
+          <input id="deeplKey" type="password" placeholder="DeepL API key" autocomplete="off" style="flex:1;min-width:0;width:auto;">
+          <button class="secondary icon" id="deeplSaveBtn">Save</button>
+          <button class="secondary icon" id="deeplTestBtn" title="Translate a test sentence">Test</button>
+        </div>
+        <div class="hint" id="deeplStatus"></div>
+        <input id="trMic" placeholder="Microphone name (optional, e.g. Yeti)">
+      </details>
+    </section>
+
     <section class="panel sb-panel" data-panel="tts">
       <div class="panel-head"><h2>🗣️ Text to speech</h2><div class="ph-tools"><span class="hint" id="ttsCount">0/300</span></div></div>
       <textarea id="ttsText" maxlength="300" placeholder="Type what it should say… (Enter to send)" style="min-height:54px;"></textarea>
@@ -584,6 +609,7 @@
 <script src="js/notify.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/captions.js"></script>
+<script src="js/translate.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/outputs.js"></script>
 <script src="js/soundboard.js"></script>

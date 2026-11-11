@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live translation</title>
+<!--
+  Live translated captions for an OBS Browser Source.
+  Listens to the microphone, cuts speech into sentences, transcribes them with Whisper (runs on this PC),
+  translates via the Remote OBS Control app (/translate → DeepL), and shows the result as captions.
+  Options go in the URL hash as JSON:
+    from      spoken language: es, en, fr, de, it, pt, ja, ko, zh, ru (default es)
+    to        DeepL target, e.g. EN-US, EN-GB, ES, FR, DE (default EN-US)
+    style     cc | movie   (default cc)
+    original  true to also show the original sentence, smaller, above the translation
+    model     base (fast) | small (more accurate, heavier)  (default base)
+    mic       part of the microphone's name (default: system default mic)
+    test      URL of an audio file to use instead of the microphone (for trying it out)
+    debug     true to show the speech level and timings
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600&family=Roboto:wght@500&display=swap">
+<style>
+  html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden;}
+  #status{position:fixed;left:24px;top:20px;font:600 22px/1.4 "Segoe UI",system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.65);padding:8px 14px;border-radius:8px;}
+  #status:empty{display:none;}
+  .cap{position:absolute;left:0;right:0;bottom:24px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:0 40px;box-sizing:border-box;transition:opacity .35s;}
+  .cap.gone{opacity:0;}
+  .orig,.tr{max-width:100%;text-align:center;}
+  /* Live captions: white text on a dark box */
+  .cc .tr{font:500 54px/1.45 Roboto,Inter,"Segoe UI",Arial,sans-serif;color:#fff;}
+  .cc .tr span,.cc .orig span{background:rgba(8,8,8,.78);padding:4px 14px;-webkit-box-decoration-break:clone;box-decoration-break:clone;}
+  .cc .orig{font:500 34px/1.45 Roboto,Inter,"Segoe UI",Arial,sans-serif;color:#cfcfcf;}
+  /* Movie subtitles */
+  .movie .tr{font:600 62px/1.25 Inter,"Segoe UI",Arial,sans-serif;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 2px 4px rgba(0,0,0,.9),0 0 12px rgba(0,0,0,.6);}
+  .movie .orig{font:600 36px/1.25 Inter,"Segoe UI",Arial,sans-serif;color:#e8e8e8;text-shadow:0 0 2px #000,0 2px 4px rgba(0,0,0,.9);}
+  #dbg{position:fixed;right:20px;top:20px;font:14px/1.4 Consolas,monospace;color:#0f0;background:rgba(0,0,0,.7);padding:6px 10px;white-space:pre;}
+</style>
+</head>
+<body>
+<div id="status">Loading live translation…</div>
+<div class="cap gone" id="cap"><div class="orig" id="orig"></div><div class="tr" id="tr"></div></div>
+<script type="module">
+const TRANSFORMERS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1/dist/transformers.min.js';
+const LANG_NAMES={ es:'spanish', en:'english', fr:'french', de:'german', it:'italian', pt:'portuguese', ja:'japanese', ko:'korean', zh:'chinese', ru:'russian', nl:'dutch', pl:'polish', tr:'turkish' };
+const opts=Object.assign({ from:'es', to:'EN-US', style:'cc', original:false, model:'base', mic:'', test:'', debug:false }, (()=>{
+  try{ return JSON.parse(decodeURIComponent(location.hash.slice(1))||'{}'); }catch(e){ return {}; }
+})());
+const status=t=>{ document.getElementById('status').textContent=t||''; };
+document.getElementById('cap').classList.add(opts.style==='movie'?'movie':'cc');
+
+// Whisper sometimes "hears" these in silence or noise — never show them
+const HALLUCINATIONS=[/subt[ií]tulos/i,/amara\.org/i,/gracias por ver/i,/suscr[ií]bete/i,/thanks? for watching/i,/please subscribe/i,/^\W*$/,/^\[.*\]$/,/^\(.*\)$/,/♪/];
+const SR=16000;
+
+// ---------------- Speech recognition model ----------------
+let transcriber;
+async function loadModel(){
+  const { pipeline, env }=await import(TRANSFORMERS);
+  env.allowLocalModels=false;
+  const id=opts.model==='small' ? 'onnx-community/whisper-small' : 'onnx-community/whisper-base';
+  const progress=p=>{ if(p.status==='progress' && p.total) status(`Downloading speech model… ${Math.round(p.loaded/p.total*100)}% (first time only)`); };
+  // CPU with a compressed model by default — OBS's built-in browser's WebGPU support is too old/unreliable.
+  // Add "gpu":true to the options to try the GPU anyway.
+  if(opts.gpu && navigator.gpu){
+    try{ transcriber=await pipeline('automatic-speech-recognition', id, { device:'webgpu', dtype:{ encoder_model:'fp32', decoder_model_merged:'q4' }, progress_callback:progress }); return 'GPU'; }
+    catch(e){ console.warn('WebGPU failed, using CPU', e); }
+  }
+  transcriber=await pipeline('automatic-speech-recognition', id, { device:'wasm', dtype:'q8', progress_callback:progress });
+  return 'CPU';
+}
+
+// ---------------- Audio in ----------------
+async function openAudio(ctx){
+  if(opts.test){
+    const el=new Audio(); el.crossOrigin='anonymous'; el.src=opts.test; el.loop=false;
+    await el.play().catch(()=>{});
+    return ctx.createMediaElementSource(el);
+  }
+  if(!window.isSecureContext || !navigator.mediaDevices) throw new Error('Microphone needs this page loaded from the Remote OBS Control app (localhost or Tailscale https).');
+  const constraints={ echoCancellation:true, noiseSuppression:true, autoGainControl:true };
+  let stream;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({ audio:constraints });
+    if(opts.mic){
+      const want=(await navigator.mediaDevices.enumerateDevices()).find(d=>d.kind==='audioinput' && d.label.toLowerCase().includes(String(opts.mic).toLowerCase()));
+      if(want && want.deviceId!==stream.getAudioTracks()[0].getSettings().deviceId){
+        stream.getTracks().forEach(t=>t.stop());
+        stream=await navigator.mediaDevices.getUserMedia({ audio:{ ...constraints, deviceId:{ exact:want.deviceId } } });
+      }
+    }
+  }catch(e){
+    if(e.name==='NotAllowedError') throw new Error('Microphone access was blocked. Start OBS with the --enable-media-stream launch option.');
+    if(e.name==='NotFoundError') throw new Error('No microphone found on this PC.');
+    throw new Error('Could not open the microphone: '+e.message);
+  }
+  return ctx.createMediaStreamSource(stream);
+}
+
+// ---------------- Cut the audio into sentences (simple voice activity detection) ----------------
+const queue=[];
+let busy=false;
+function startSegmenting(ctx, src){
+  const node=ctx.createScriptProcessor(2048,1,1);
+  const FRAME=2048/SR;                 // ~128 ms
+  let noise=0.004, inSpeech=false, silent=0, chunks=[], pre=[];
+  node.onaudioprocess=e=>{
+    const x=e.inputBuffer.getChannelData(0);
+    let s=0; for(let i=0;i<x.length;i++) s+=x[i]*x[i];
+    const rms=Math.sqrt(s/x.length);
+    const copy=new Float32Array(x);
+    if(!inSpeech) noise=noise*0.97+Math.min(rms,0.05)*0.03;  // learn the room's background level
+    const loud=rms>Math.max(0.012, noise*3);
+    if(opts.debug) dbg(`level ${rms.toFixed(3)}  noise ${noise.toFixed(3)}  ${inSpeech?'SPEECH':'-'}  queue ${queue.length}`);
+    if(!inSpeech){
+      pre.push(copy); if(pre.length>3) pre.shift();     // keep ~0.4 s before speech starts
+      if(loud){ inSpeech=true; chunks=[...pre]; silent=0; }
+      return;
+    }
+    chunks.push(copy);
+    silent=loud?0:silent+FRAME;
+    const len=chunks.length*FRAME;
+    // A sentence ends at ~0.7 s of quiet, or after 9 s so captions keep flowing during long talking
+    if(silent>=0.7 || len>=9){
+      inSpeech=false;
+      if(len-silent>=0.5){ queue.push(join(chunks)); pump(); }
+      chunks=[]; pre=[];
+    }
+  };
+  src.connect(node);
+  const mute=ctx.createGain(); mute.gain.value=0; node.connect(mute).connect(ctx.destination); // keeps the processor running, silently
+}
+const join=parts=>{ const out=new Float32Array(parts.reduce((n,p)=>n+p.length,0)); let o=0; parts.forEach(p=>{ out.set(p,o); o+=p.length; }); return out; };
+
+async function pump(){
+  if(busy || !queue.length) return;
+  busy=true;
+  // If we fell behind, skip to the newest sentence so captions stay live
+  const audio=queue.length>2 ? queue.splice(0,queue.length).pop() : queue.shift();
+  try{
+    const t0=performance.now();
+    const r=await transcriber(audio, { language:LANG_NAMES[opts.from]||'spanish', task:'transcribe' });
+    const text=(r.text||'').trim().replace(/\s+/g,' ');
+    const t1=performance.now();
+    if(text && !HALLUCINATIONS.some(rx=>rx.test(text))){
+      const tr=await translate(text);
+      show(text, tr);
+      if(opts.debug) lastTimes=`asr ${Math.round(t1-t0)}ms  deepl ${Math.round(performance.now()-t1)}ms`;
+    }
+  }catch(e){ console.error(e); }
+  busy=false;
+  pump();
+}
+
+// ---------------- Translate (through the app, which holds the DeepL key) ----------------
+let warned=false;
+async function translate(text){
+  if(opts.from.toUpperCase()===String(opts.to).slice(0,2)) return text;
+  try{
+    const r=await fetch('/translate',{ method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ text, source:opts.from.toUpperCase(), target:opts.to }) });
+    const j=await r.json();
+    if(j.ok) return j.text;
+    if(!warned){ warned=true; status(j.error==='no-key' ? 'No DeepL key saved in Remote OBS Control — showing the original language.' : 'Translation: '+j.error); setTimeout(()=>status(''),6000); }
+  }catch(e){
+    if(!warned){ warned=true; status('Can\'t reach the Remote OBS Control app — is it open?'); setTimeout(()=>status(''),6000); }
+  }
+  return text;
+}
+
+// ---------------- Captions ----------------
+let hideTimer;
+function show(original, translated){
+  const cap=document.getElementById('cap');
+  document.getElementById('tr').innerHTML='<span></span>';
+  document.getElementById('tr').firstChild.textContent=translated;
+  const o=document.getElementById('orig');
+  o.innerHTML=''; o.style.display=opts.original && original!==translated ? '' : 'none';
+  if(opts.original){ o.innerHTML='<span></span>'; o.firstChild.textContent=original; }
+  cap.classList.remove('gone');
+  clearTimeout(hideTimer);
+  hideTimer=setTimeout(()=>cap.classList.add('gone'), Math.max(3500, translated.split(' ').length*450));
+  window.__last={ original, translated };
+}
+
+let lastTimes='';
+function dbg(t){
+  let el=document.getElementById('dbg');
+  if(!el){ el=document.createElement('div'); el.id='dbg'; document.body.appendChild(el); }
+  el.textContent=t+(lastTimes?'\n'+lastTimes:'');
+}
+
+(async()=>{
+  try{
+    const where=await loadModel();
+    status('Starting microphone…');
+    const ctx=new AudioContext({ sampleRate:SR });
+    const src=await openAudio(ctx);
+    if(ctx.state==='suspended') await ctx.resume();
+    startSegmenting(ctx, src);
+    status(opts.debug?`Listening (${where})`:'');
+    window.__ready=where;
+  }catch(e){
+    console.error(e);
+    status('Live translation: '+e.message);
+    window.__error=e.message;
+  }
+})();
+</script>
+</body>
+</html>

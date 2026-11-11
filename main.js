@@ -397,6 +397,7 @@ let filterServerUrl = null;
 function startFilterServer() {
   const dir = path.join(__dirname, 'renderer', 'filters');
   const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && (req.url || '').split('?')[0] === '/translate') return handleTranslate(req, res);
     const name = decodeURIComponent((req.url || '/').split(/[?#]/)[0]).replace(/^\/+/, '') || 'index.html';
     if (!/^[\w-]+\.html$/.test(name)) { res.writeHead(404); return res.end(); }
     fs.readFile(path.join(dir, name), (err, data) => {
@@ -409,6 +410,63 @@ function startFilterServer() {
   server.listen(FILTER_PORT, '127.0.0.1', () => { filterServerUrl = `http://localhost:${FILTER_PORT}/`; });
 }
 app.whenReady().then(startFilterServer);
+
+// ==================== DeepL translation ====================
+// The live-translation page (running in OBS) posts recognised speech here; the app adds your DeepL
+// key, which never leaves this PC. (DeepL also refuses calls made straight from web pages.)
+const APP_SECRETS = '_app';
+const DEEPL_LANGS = /^[A-Z]{2}(-[A-Z]{2,4})?$/;
+const deeplBase = (key) => key.trim().endsWith(':fx') ? 'https://api-free.deepl.com' : 'https://api.deepl.com';
+async function deeplTranslate(text, source, target, keyOverride) {
+  const key = keyOverride || getSecret(APP_SECRETS, 'deeplKey');
+  if (!key) return { ok: false, error: 'no-key' };
+  const body = { text: [String(text).slice(0, 1000)], target_lang: target };
+  if (source) body.source_lang = source;
+  try {
+    const r = await fetch(`${deeplBase(key)}/v2/translate`, {
+      method: 'POST',
+      headers: { 'Authorization': `DeepL-Auth-Key ${key.trim()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (r.status === 403) return { ok: false, error: 'DeepL rejected the key' };
+    if (r.status === 456) return { ok: false, error: 'DeepL monthly character limit reached' };
+    if (r.status === 429) return { ok: false, error: 'Too many requests to DeepL — slow down' };
+    if (!r.ok) return { ok: false, error: `DeepL error ${r.status}` };
+    const j = await r.json();
+    return { ok: true, text: (j.translations && j.translations[0] && j.translations[0].text) || '' };
+  } catch (e) {
+    return { ok: false, error: 'Could not reach DeepL' };
+  }
+}
+let translateWindow = { start: 0, count: 0 };
+function handleTranslate(req, res) {
+  const reply = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  // Simple cap so a stuck page (or anyone else on your tailnet) can't burn through your DeepL quota
+  const now = Date.now();
+  if (now - translateWindow.start > 60000) translateWindow = { start: now, count: 0 };
+  if (++translateWindow.count > 90) return reply(429, { ok: false, error: 'Too many translations this minute' });
+  let raw = '';
+  req.on('data', (c) => { raw += c; if (raw.length > 8192) req.destroy(); });
+  req.on('end', async () => {
+    let b; try { b = JSON.parse(raw); } catch (e) { return reply(400, { ok: false, error: 'bad request' }); }
+    const source = String(b.source || '').toUpperCase(), target = String(b.target || '').toUpperCase();
+    if (!b.text || !DEEPL_LANGS.test(target) || (source && !DEEPL_LANGS.test(source))) return reply(400, { ok: false, error: 'bad request' });
+    reply(200, await deeplTranslate(b.text, source, target));
+  });
+}
+// Settings panel: check a key works and how much of the monthly quota is used
+ipcMain.handle('deepl:check', async (e, key) => {
+  const k = key || getSecret(APP_SECRETS, 'deeplKey');
+  if (!k) return { ok: false, error: 'No key saved' };
+  try {
+    const r = await fetch(`${deeplBase(k)}/v2/usage`, { headers: { 'Authorization': `DeepL-Auth-Key ${k.trim()}` } });
+    if (r.status === 403) return { ok: false, error: 'DeepL rejected the key' };
+    if (!r.ok) return { ok: false, error: `DeepL error ${r.status}` };
+    const j = await r.json();
+    return { ok: true, used: j.character_count, limit: j.character_limit };
+  } catch (err) { return { ok: false, error: 'Could not reach DeepL' }; }
+});
+ipcMain.handle('deepl:translate', (e, text, source, target) => deeplTranslate(text, source, target));
 ipcMain.handle('filters:localUrl', () => filterServerUrl);
 
 // For OBS on *another* PC: if Tailscale Serve proxies this machine's https://<name>.ts.net/ to the

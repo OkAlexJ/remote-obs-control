@@ -93,6 +93,12 @@ npm run build:win-portable   # single portable .exe
 - Styles: live CC (word-by-word, dark box), movie subtitles, TikTok (big outlined, word pop).
 - 10 presets, live preview, Clear button, and a macro step. Uses one "Captions" source at the bottom of the live scene.
 
+**🌐 Live translation (e.g. Spanish → English)**
+- A "Live Translation" source listens to the mic on the OBS PC, transcribes each sentence with Whisper running locally (CPU, ~80 MB model downloaded once), translates it with DeepL, and shows captions (live-CC or movie style, optionally with the original line).
+- Your DeepL API key is stored encrypted in this app and never sent to the OBS PC: the page asks this app's /translate endpoint, which calls DeepL (capped at 90 requests/minute).
+- Same requirements as the bald filter: OBS started with `--enable-media-stream`, this app open, and Tailscale Serve for OBS on another PC.
+- Captions appear ~2–4 s after each sentence ends.
+
 **Everywhere**
 - **Ctrl+K** command palette (scenes, sources, mutes, sounds, macros, stream/record actions…).
 - **Ctrl+P** profile switcher, **Ctrl+,** settings, **Ctrl+Shift+T** next theme, **Ctrl+T** keep on top, **?** help.

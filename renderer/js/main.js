@@ -9,6 +9,7 @@ function enterApp(profile){
   renderNotifyPanel();
   initTtsUI();
   renderCaptionPanel();
+  initTranslateUI();
   renderActivityLog();
   applyLayout();
   setConnectedUI(false);

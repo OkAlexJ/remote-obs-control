@@ -7,19 +7,22 @@ const BALD_SOURCE_NAME='Bald Filter';
 const WEBCAM_KINDS=['dshow_input','av_capture_input','av_capture_input_v2','macos-avcapture','v4l2_input'];
 const isLocalHost=h=>/^(localhost|127\.\d+\.\d+\.\d+|::1|\[::1\])$/i.test(String(h||'').trim());
 
-async function baldFilterBaseUrl(){
-  if(!window.desktop) throw new Error('The bald filter needs the desktop app.');
+// Address OBS should load one of our pages (renderer/filters/<file>) from: localhost when OBS is on
+// this PC, otherwise this PC's private Tailscale https address.
+async function filterPageUrl(file, what){
+  if(!window.desktop) throw new Error(`The ${what} needs the desktop app.`);
   if(OBS.lastConn && isLocalHost(OBS.lastConn.host)){
     const base=await window.desktop.filters.localUrl();
     if(!base) throw new Error("The app's filter server didn't start — is another copy of the app running?");
-    return base+'bald-filter.html';
+    return base+file;
   }
   const t=await window.desktop.filters.tailnetUrl();
-  if(t.ok) return t.url+'bald-filter.html';
+  if(t.ok) return t.url+file;
   if(t.reason==='not-served')
-    throw new Error('To use the bald filter on another PC, share it over your tailnet once. On this PC run:\n\ntailscale serve --bg http://127.0.0.1:47821\n\n(It stays private to your tailnet.)');
-  throw new Error('For OBS on another PC the bald filter goes through Tailscale, but Tailscale isn\'t running on this PC. Start Tailscale, or connect to an OBS on this PC (localhost).');
+    throw new Error(`To use the ${what} on another PC, share it over your tailnet once. On this PC run:\n\ntailscale serve --bg http://127.0.0.1:47821\n\n(It stays private to your tailnet.)`);
+  throw new Error(`For OBS on another PC the ${what} goes through Tailscale, but Tailscale isn't running on this PC. Start Tailscale, or connect to an OBS on this PC (localhost).`);
 }
+const baldFilterBaseUrl=()=>filterPageUrl('bald-filter.html','bald filter');
 
 async function addBaldFilter(){
   if(!editingScene) throw new Error('Pick a scene first.');

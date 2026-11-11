@@ -438,3 +438,7 @@ body.compact .topbar{padding:6px 10px;}
 .notify-opts{align-items:center;}
 
 .caption-preview{margin:10px 0 8px;border-radius:12px;background:linear-gradient(135deg,#2f3d2c,#3d4f6b);overflow:hidden;display:flex;justify-content:center;}
+
+.tr-langs{display:flex;align-items:center;gap:6px;}
+.tr-langs select{flex:1;min-width:0;width:auto;padding:6px 8px;}
+#trAddBtn{margin-top:4px;}
